@@ -221,9 +221,9 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
   - **Features could include:**
     - Visualizing Statistics: Charts and graphs for ticket processing times, user activity (closers, bonkers), dispute rates, etc.
     - Data Summaries: Customizable reports and summaries.
-    - Search for Analytics and Management:
-      - Develop a web application (e.g., using React + Vite for the frontend, and Node.js/Express for a backend API المرضى the database) to:
-      - Visualize statistics derived from the collected ticket data (e.g., processing times, user activity, bonk patterns).
+    - Search for Analytics and Management
+    - Develop a web application to:
+      - Visualize statistics derived from the collected ticket data.
       - Provide summaries and reports.
       - Offer an interface to search, filter, and view ticket data stored in the database.
       - and Filtering:** Advanced search capabilities for all recorded ticket data.
