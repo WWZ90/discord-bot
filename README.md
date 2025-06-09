@@ -1,22 +1,31 @@
 # UMA Helper Bot for Discord & Google Sheets
 
-This Discord bot is designed to automate the process of recording information from specific "ticket" or "proposal" channels into a Google Sheet. It streamlines workflows by extracting data from Discord messages based on defined patterns and then updating or adding rows to a designated Google Sheet.
+This Discord bot automates recording information from "ticket" channels into a Google Sheet. It can operate manually via a `!record` command or automatically scan eligible tickets based on configurable intervals and age. It parses messages for key data points, including a "CLOSING:" block for finalizers and "bonk" actions, and then upserts (updates or inserts) this data into a designated Google Sheet. The bot also features configurable post-processing actions like attempting to close tickets via another bot (e.g., Ticket Tool).
 
-## Features
+## Core Features
 
-*   **Automatic Data Extraction:** Parses Discord channel history to find key information.
-*   **Google Sheets Integration:** Automatically adds or updates rows in a Google Sheet.
-*   **Ticket Number Parsing:** Extracts a proposal/ticket number from the channel name (e.g., `ticket-123` -> `123`).
-*   **OO Link Extraction:** Finds and records a specific "Optimistic Oracle" link (`https://oracle.uma.xyz/...`) from messages.
-*   **"Final:" Message Processing:**
-    *   Identifies a message starting with "Final:" to determine Primary, Secondary, and Tertiary users, and the "Closer" (author of the "Final:" message).
-    *   Supports an empty "Final:" line (no P/S/T users).
-    *   Handles a special "Final: disputed" case.
-*   **"Bonk" Processing:** Parses subsequent lines within the "Final:" message for "bonk" actions (e.g., `UserA bonked UserB primary`) and records bonkers and bonked users.
-*   **Update/Insert Logic:** Checks if a record for a proposal already exists in the Google Sheet and updates it; otherwise, adds a new row.
-*   **Assertion Recording:** A special `!record assertion` command to log only the OO Link and set a "Type" column to "Assertion".
-*   **Automatic Ticket Closing (Optional):** Can send a pre-configured command to another bot (like Ticket Tool) to close the ticket after processing. (NOT WORKING)
-*   **Configurable:** Uses a `.env` file for easy configuration of tokens, IDs, and commands.
+*   **Manual & Automatic Processing:**
+    *   **`!record` command:** Manually trigger processing for the current ticket channel. Supports `!record assertion` and `!record disputed` sub-types.
+    *   **Automatic Scanner:** Periodically scans for `ticket-` channels older than a configured age, processes them, and attempts a post-processing action (e.g., close/delete).
+*   **Data Extraction & Parsing:**
+    *   Extracts a numeric **Proposal ID** from channel names (e.g., `ticket-123` -> `123`). This ID is also used for an order column (`#`) in the sheet.
+    *   Finds the latest **Optimistic Oracle (OO) Link** (`https://oracle.uma.xyz/...`).
+    *   Processes the latest message starting with **`CLOSING:`** (case-insensitive):
+        *   Identifies **Primary, Secondary, Tertiary** users (P/S/T) from a comma-separated list. Supports 0-3 users and names with spaces.
+        *   Identifies the **Closer** (author of the `CLOSING:` message).
+        *   Handles special cases: `CLOSING: disputed` (marks as disputed) and `CLOSING: assertion` (sets type to Assertion).
+    *   Parses **"Bonk" actions** from lines within the same `CLOSING:` message (e.g., `Bonker Name bonked Victim Name type`).
+*   **Google Sheets Integration:**
+    *   Uses a designated **Order Column (`#`)** in the sheet (populated with the Proposal ID) to find and update existing rows.
+    *   If a row with the corresponding Order # is not found, a **new row is added** to the end of the sheet.
+*   **Persistent Configuration (`bot_config.json`):**
+    *   Settings for automatic processing, post-processing actions, ticket age, processing interval, and error notification user are stored and loaded from `bot_config.json`.
+    *   Configurable via **Slash Commands (`/config ...`)**.
+*   **Error Handling & Flagging:**
+    *   If critical information (like a `CLOSING:` block) is missing during an automatic scan, the ticket channel will have a "Flag:" message posted by the bot (pinging a configured error user) and will be skipped in future auto-scans.
+    *   Validation errors within a `CLOSING:` block are reported without auto-flagging, allowing for correction.
+*   **Ticket Post-Processing (Configurable):**
+    *   After successful data recording, can attempt to send a command (e.g., `$close` or `$delete`) to Ticket Tool based on configuration.
 
 ## Prerequisites
 
@@ -31,7 +40,7 @@ This Discord bot is designed to automate the process of recording information fr
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/WWZ90/discord-bot.git
+git clone https://github.com/WWZ90/discord-bot.git # Or your repository URL
 cd discord-bot
 ```
 
@@ -92,33 +101,32 @@ To allow the bot to interact with Google Sheets:
 Create a file named .env in the root directory of the project. This file is listed in .gitignore and should never be committed to version control.
 Populate it with the following, replacing the placeholder values:
 ```
-# Discord Bot Token
-DISCORD_TOKEN=YOUR_ACTUAL_DISCORD_BOT_TOKEN
+# Discord Bot
+DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
+BOT_ID=YOUR_BOT_APPLICATION_CLIENT_ID 
+GUILD_ID=YOUR_SERVER_ID_FOR_SLASH_COMMAND_TESTING # Optional, for faster slash command updates during dev
 
-# Google Sheets Configuration
-GOOGLE_SHEET_ID=YOUR_GOOGLE_SHEET_ID_FROM_THE_URL
+# Google Sheets
+GOOGLE_SHEET_ID=YOUR_GOOGLE_SHEET_ID
 GOOGLE_SERVICE_ACCOUNT_EMAIL=THE_CLIENT_EMAIL_FROM_CREDENTIALS.JSON
-GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_FROM_CREDENTIALS.JSON_WITH_ALL_NEWLINES_REPLACED_BY_\\n\n-----END PRIVATE KEY-----\n"
-WORKSHEET_TITLE=Sheet1 # Or the exact name of the tab/worksheet you want to use
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_FROM_JSON_WITH_\\n_FOR_NEWLINES\n-----END PRIVATE KEY-----\n"
+WORKSHEET_TITLE=Sheet1 # Target tab name in your Google Sheet
 
-# Bot Configuration
+# Bot Behavior
 COMMAND_PREFIX=!
+DEFAULT_ERROR_USER_ID=USER_ID_TO_PING_ON_FLAGGED_ERRORS # Optional: User ID
 
-# Optional: Command for Ticket Tool to close tickets
-# Example: TICKET_TOOL_CLOSE_COMMAND=$close Processed by UMA Helper
+# Cron Job for Automatic Scanning
+CRON_WAKE_INTERVAL_EXPRESSION="* * * * *" # Default: Every minute (Bot "wakes up" this often to check)
+# Initial default values for bot_config.json (can be changed via /config commands)
+ENABLE_AUTO_PROCESSING=true # Initial state for auto-processing (true/false)
+DEFAULT_TICKET_POST_ACTION=close # Initial post-processing action ('none', 'close', 'delete')
+# DEFAULT_MIN_TICKET_AGE and DEFAULT_PROCESSING_INTERVAL are hardcoded as initial defaults in index.js if bot_config.json is new
+
+# Ticket Tool Commands (if used)
 TICKET_TOOL_CLOSE_COMMAND=$close
-```
-#### Explanation of .env variables:
-```
-DISCORD_TOKEN: The token you copied from the Discord Developer Portal.
-GOOGLE_SHEET_ID: The long ID found in the URL of your Google Sheet (e.g., https://docs.google.com/spreadsheets/d/THIS_IS_THE_ID/edit).
-GOOGLE_SERVICE_ACCOUNT_EMAIL: The client_email from your credentials.json file.
-GOOGLE_PRIVATE_KEY: The private_key from your credentials.json file.
-Crucial Formatting: Copy the entire private key string, including -----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY-----.
-It must be enclosed in double quotes "".
-WORKSHEET_TITLE: The exact name of the specific tab (worksheet) within your Google Sheet that the bot should write to (e.g., Sheet1, ProposalsData).
-COMMAND_PREFIX: The prefix for bot commands (e.g., !).
-TICKET_TOOL_CLOSE_COMMAND: (Optional) If you use Ticket Tool and want the bot to attempt to close tickets, set this to the text command Ticket Tool uses (e.g., $close or $close Processed).
+TICKET_TOOL_DELETE_COMMAND=$delete
+DEFAULT_ERROR_USER_ID=
 ```
 
 ### 7. Prepare Your Google Sheet Headers
@@ -151,74 +159,72 @@ Once all dependencies are installed and the .env file is correctly configured:
 You should see console this console logs:
 ```
 GoogleSpreadsheet instance created.
-Successfully logged into Discord.
-UMABot#aaaa has connected to Discord!
-Bot is ready to process tickets. Use "!record" or "!record assertion".
+Configuration loaded from bot_config.json.
+UMABot# has connected to Discord and is ready!
+Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
 ```
 
 ## How the Bot Works (index.js)
-1. Initialization:
- - Loads environment variables from .env.
- - Initializes the Discord client with necessary intents.
- - Sets up the Google Sheets API client using credentials (either from .env variables for email/private key or directly from credentials.json if you modify the code to use GoogleAuth with keyFile).
-2. Event Listener (messageCreate):
- - The bot listens for new messages in servers it's a part of.
- - It ignores messages from other bots (and itself, unless configured otherwise).
- - It checks if the message starts with the defined COMMAND_PREFIX.
-3. Command Handling (!record):
- - Permissions: Checks if the user has "Manage Messages" permission (configurable).
- - Sub-commands:
-  - !record assertion: Enters "Assertion" mode.
- - Proposal Number: Extracts a numeric ID from the channel name (e.g., ticket-123 becomes 123). This ID is normalized to remove leading zeros for consistent matching with sheet data.
- - OO Link Search: Fetches recent messages and scans for the latest URL matching https://oracle.uma.xyz/....
- - Assertion Mode Logic: If !record assertion, it sets Type to "Assertion" and primarily focuses on the OO Link. Other data fields are generally left blank.
- - Normal Record Mode Logic:
-  - "Final:" Message Search: Fetches recent messages to find the latest message starting with "Final:" (case-insensitive).
-  - Closer Identification: The author of this "Final:" message is identified as the "Closer". Their display name is used.
-  - "Final: disputed" Case: If the line is exactly "Final: disputed", the Disputed? (y?) column is set to "y", and other P/S/T/bonk fields are cleared.
-  - P/S/T User Extraction: Parses users (0 to 3 allowed) from the "Final:" line.
-  - Validation 1 (P/S/T Count): Ensures the "Final:" line doesn't exceed 3 users.
-  - Bonk Processing:
-   - Scans subsequent lines within the same "Final:" message for patterns like BonkerName bonked VictimName type.
-   - Validation 2 (Bonked User): Ensures a user listed in the "Final:" line (P/S/T) is not also a VictimName in a bonk line.
-   - Records up to 5 BonkerNames (can be duplicates if one user bonks multiple times) and unique VictimNames for each bonk type (primary, secondary, tertiary), joined by commas.  
- - Error Handling: If validations fail, an error message is sent to Discord, and no data is written to the sheet.
- - Recorder: The display name of the user who executed the !record command.
-4. Google Sheets Interaction (upsertSpreadsheetRow function):
- - Takes the processed rowData and the proposalNumber.
- - Connects to the specified Google Sheet and worksheet.
- - Loads header row to ensure correct column mapping.
- - Searches for an existing row: Iterates through sheet rows, comparing the normalized proposalNumber with the value in the PROPOSAL_COLUMN_HEADER column (also normalized for comparison).
- - Updates or Adds:
-  - If a row with a matching proposalNumber is found, it updates that row with the new rowData.
-  - If no match is found, it adds a new row with rowData.
-5. Confirmation and Ticket Closing:
- - Sends a confirmation message to Discord summarizing the data recorded and whether it was added or updated.
- - (Optional) If TICKET_TOOL_CLOSE_COMMAND is set in .env, the bot sends this command as a text message to the ticket channel to attempt an automatic close via another bot (e.g., Ticket Tool). (NOT WORKING ATM)
+1. **Configuration** (bot_config.json & /config):
+  - On first run, bot_config.json is created with default settings.
+  - Administrators can use /config slash commands to:
+    - toggle_auto_processing [enabled: True/False]: Turn the automatic scanner on/off.
+    - set_post_processing_action [action: none/close/delete]: Define what happens after a ticket is processed (nothing, send  - $close, or send $delete).
+    - set_min_ticket_age [age: "2h5m"]: Set how old a ticket must be before auto-processing.
+    - set_processing_interval [interval: "30m"]: Set how often the bot attempts a full scan of eligible tickets.
+    - set_error_user [user: @User]: Designate a user to be pinged on certain errors/flags.
+    - view_settings: Display current configurations.
+
+2. **Automatic Scanner (Cron Job)**:
+  - "Wakes up" at a fixed interval defined by CRON_WAKE_INTERVAL (from .env, e.g., every minute).
+  - Checks if autoProcessingEnabled is true.
+  - Checks if enough time has passed since lastSuccessfulScanTimestamp based on processingIntervalMs.
+  - If conditions met, it scans all channels starting with ticket- in the server.
+  - For each eligible ticket (older than minTicketAgeForProcessing and not already containing "Flag:"):
+    - Calls processTicketChannel.
+  - Updates lastSuccessfulScanTimestamp after a scan cycle.
+3. **Manual Processing** (!record):
+  - !record: Processes the current ticket channel immediately, regardless of auto-processing state or if previously flagged.
+  - !record assertion: Processes as an "Assertion" type, mainly recording OO Link.
+  - !record disputed: Processes as a "Disputed" type, setting the disputed flag.
+4. processTicketChannel **Function (Core Logic)**:
+  - **Flag Check:** For auto-scans, skips if a message starts with "Flag:" or "Ticket data for order" (indicating prior processing/error).
+  - **OO Link Extraction:** Finds the latest https://oracle.uma.xyz/... link.
+  - **"CLOSING:" Block Processing:**
+    - Finds the latest message starting with CLOSING: (case-insensitive).
+    -**Special Cases:**
+      - CLOSING: disputed: Sets Disputed? (y?) to "y", clears P/S/T/bonks.
+      - CLOSING: assertion: Sets Type to "Assertion", clears P/S/T/bonks.
+    - **Normal Case:** Parses P/S/T users (0-3 allowed, comma-separated, names can have spaces). Identifies "Closer" (author of CLOSING: message).
+    - **Bonk Parsing:** Reads lines within the same CLOSING: message for Bonker Name bonked Victim Name type patterns (handles spaces in names).
+  - **Validations:** Checks P/S/T user count. Errors within a CLOSING: block are reported to the channel (pinging error user) but don't auto-flag the ticket.
+  - **Flagging:** If a CLOSING: block is not found (and not an assertion/disputed type), a "Flag:" message is posted, and the ticket is skipped by future auto-scans.
+  -  **Data Recording:** Calls upsertRowByOrderValue.
+  - **Discord Summary:** Posts a summary of processed data to the ticket channel.
+  - **Post-Processing:** Sends configured close/delete command to Ticket Tool if action is not "none".
+5. **Google Sheets (upsertRowByOrderValue):**
+  - Uses the Order # column (populated with the normalized Proposal ID) to find a row.
+  - If found, updates the row.
+  - If not found, **adds a new row to the end of the sheet**.
+  - Ensures blank cells for empty data instead of "N/A".
+  - /scan_status Command: Allows users with "Manage Messages" permission to see when the next full automatic scan is approximately due.  
 
 ## Important Usage Notes
- - Manual Trigger: This bot is designed to be triggered manually in each ticket channel using the !record command.
- - Timing: It is recommended to run the !record command only after the initial 2-hour period (or relevant discussion/voting period) has passed to ensure all relevant data (like the "Final:" message and bonks) is present.
- - Verification: Constantly verify that the bot is processing data accurately and that the information in the Google Sheet is correct. Manual checks are crucial, especially initially, to catch any discrepancies or errors in data processing. Due to the dynamic nature of Discord messages, parsing can sometimes encounter unexpected formats.
-
-## Future Automation Ideas
-The current bot relies on finding a "Final:" message. Future enhancements could make it less dependent on this specific keyword by implementing more heuristic-based parsing:
- 1. Automatic P/S/T Detection (Alternative to "Final:"):
-  - The bot could be programmed to identify the first 3 unique users (excluding known bots like Ticket Tool) who wrote in the ticket.
-  - It could further refine this by looking for messages from these users that start with a keyword like "Verification" and also contain image attachments (as evidence).
-  - A mapping system could be implemented if the Discord usernames need to be translated to specific names for the sheet (e.g., User1-bot on Discord maps to User1 in the sheet). This would provide the P/S/T users in order.
- 2. Independent Bonk Pattern Analysis:
-  - The bot could scan messages for the BonkerName bonked VictimName type pattern independently of the "Final:" message.
-  - This would require careful consideration of context (e.g., only processing bonks made after P/S/T are identified or within a certain timeframe).
-These are more complex to implement reliably and would require robust error handling and clear rule definitions.
+  - **Manual !record:** Can be used anytime to process/re-process a ticket.
+  - **Automatic Scanner Timing:** Configure minTicketAgeForProcessing and processingIntervalMs via /config commands to control when and how often automatic processing occurs.
+  - **Verification:** Regularly check bot output and Google Sheet data for accuracy, especially after configuration changes or bot updates.
 
 ## Troubleshooting
- - "Error: GoogleSpreadsheet instance is not initialized": Double-check your GOOGLE_SHEET_ID, GOOGLE_SERVICE_ACCOUNT_EMAIL, and GOOGLE_PRIVATE_KEY in .env. Ensure the private key format is correct (single line).
- - "Error: Worksheet titled "..." not found": Verify WORKSHEET_TITLE in .env matches the tab name in your Google Sheet exactly (case-sensitive).
- - "Error: Column "Proposal" does not exist...": Ensure your Google Sheet has a header row, and the column used for matching proposal IDs is correctly named (and matches PROPOSAL_COLUMN_HEADER in the code if you changed it).
- - Permissions Errors (Discord): Make sure the bot has the necessary Privileged Intents enabled in the Developer Portal and the required permissions in your server/channels.
- - Permissions Errors (Google Sheets): Confirm the service account email has "Editor" access to your Google Sheet.
- - Bot doesn't respond / !record fails silently: Check the console for errors. Ensure DISCORD_TOKEN is correct.
- - Row not updating / new row added китайською: This usually means the proposalNumber normalization or comparison is failing. Check console logs for Normalized Proposal Number and how cell values are being read/compared.
- - Ticket Tool not closing: Ticket Tool might be ignoring messages from bots. Confirm if $close (or your configured command) works when sent by a bot, or if Ticket Tool has settings to allow bot commands/specific bot roles to execute its commands. I still haven't found a solution to this problem. Apparently, a bot can't execute another bot's command.
+  - **"Invalid CRON_WAKE_INTERVAL...":** Ensure CRON_WAKE_INTERVAL_EXPRESSION in .env is a valid 5-field cron string (e.g., * * * * * for every minute). Use crontab.guru.
+  - **Slash Commands Not Appearing:** Run node deploy-commands.js. If using GUILD_ID in .env for deploy-commands.js, ensure it's correct. Global commands can take up to an hour to appear.
+  - **Config Not Saving/Loading:** Check console for errors related to bot_config.json. Ensure the bot has write permissions in its directory.
+  - **Other common issues:** Refer to the troubleshooting section in the previous README version (related to Google Sheets setup, Discord permissions, token errors, etc.).
 
+**Key Updates in this README:**
+
+*   **Features:** Updated to include automatic scanning, `bot_config.json`, slash commands for config, new `CLOSING:` logic, and the "Flagging" behavior.
+*   **`.env` Variables:** Added `BOT_ID`, `GUILD_ID`, and clarified `CRON_WAKE_INTERVAL_EXPRESSION` vs. user-configurable intervals.
+*   **Slash Command Deployment:** Added a dedicated step `8. Deploy Slash Commands`.
+*   **How the Bot Works:** Significantly expanded to explain the new automatic scanner, `bot_config.json`, the `/config` and `/scan_status` commands, and the refined `processTicketChannel` logic for `CLOSING:`, assertions, disputes, and flagging.
+*   **Important Usage Notes:** Updated to reflect manual vs. automatic modes.
+*   **Troubleshooting:** Added a note about `CRON_WAKE_INTERVAL` and slash commands.
