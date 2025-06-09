@@ -215,10 +215,10 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
   - **Verification:** Regularly check bot output and Google Sheet data for accuracy, especially after configuration changes or bot updates.
 
 ## Potential Future Enhancements
-**- Comprehensive Database Integration:**
+  - **Comprehensive Database Integration:**
   This would allow for more complex data integrity rules and better performance under high load.
-**- Web Interface for advanced analytics or direct integration with other backend services.**
-  **Features could include:**
+  - **Web Interface for advanced analytics or direct integration with other backend services.**
+  - **Features could include:**
     - Visualizing Statistics: Charts and graphs for ticket processing times, user activity (closers, bonkers), dispute rates, etc.
     - Data Summaries: Customizable reports and summaries.
     - Search for Analytics and Management:
