@@ -214,6 +214,25 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
   - **Automatic Scanner Timing:** Configure minTicketAgeForProcessing and processingIntervalMs via /config commands to control when and how often automatic processing occurs.
   - **Verification:** Regularly check bot output and Google Sheet data for accuracy, especially after configuration changes or bot updates.
 
+## Potential Future Enhancements
+**- Comprehensive Database Integration:**
+  This would allow for more complex data integrity rules and better performance under high load.
+**- Web Interface for advanced analytics or direct integration with other backend services.**
+  **Features could include:**
+    - Visualizing Statistics: Charts and graphs for ticket processing times, user activity (closers, bonkers), dispute rates, etc.
+    - Data Summaries: Customizable reports and summaries.
+    - Search for Analytics and Management:
+      - Develop a web application (e.g., using React + Vite for the frontend, and Node.js/Express for a backend API المرضى the database) to:
+      - Visualize statistics derived from the collected ticket data (e.g., processing times, user activity, bonk patterns).
+      - Provide summaries and reports.
+      - Offer an interface to search, filter, and view ticket data stored in the database.
+      - and Filtering:** Advanced search capabilities for all recorded ticket data.
+      - Export to Sheet/CSV: Functionality to export queried data or reports to a new Google Sheet or CSV file for ad-hoc analysis or sharing.
+      - (Optional) Bot Configuration Interface: A web UI to manage bot settings currently handled by /config commands.
+      - Potentially allow exporting selected data to CSV or a new Google Sheet for ad-hoc analysis.
+      - This would make the entire data processing and review workflow significantly faster, more efficient, and more user-friendly than relying solely on the Google Sheet or* This would significantly improve data accessibility and analysis efficiency beyond what a raw Google Sheet or direct database queries can offer to non-technical users.
+      - Implementing these would make the entire data collection and analysis process much faster, more efficient, and direct database queries.
+
 ## Troubleshooting
   - **"Invalid CRON_WAKE_INTERVAL...":** Ensure CRON_WAKE_INTERVAL_EXPRESSION in .env is a valid 5-field cron string (e.g., * * * * * for every minute). Use crontab.guru.
   - **Slash Commands Not Appearing:** Run node deploy-commands.js. If using GUILD_ID in .env for deploy-commands.js, ensure it's correct. Global commands can take up to an hour to appear.
