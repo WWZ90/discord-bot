@@ -1,39 +1,46 @@
 # UMA Helper Bot for Discord & Google Sheets
 
-This Discord bot automates recording information from "ticket" channels into a Google Sheet. It can operate manually via a `!record` command or automatically scan eligible tickets based on configurable intervals and age. It parses messages for key data points, including a "CLOSING:" block for finalizers and "bonk" actions, and then upserts (updates or inserts) this data into a designated Google Sheet. The bot also features configurable post-processing actions like attempting to close tickets via another bot (e.g., Ticket Tool).
+This versatile Discord bot automates recording information from dedicated "proposal" channels and "thread" channels into a Google Sheet. It can operate manually via `!record` (for channels) and `!recordt` (for threads) commands, or automatically scan eligible `proposal-` channels based on configurable intervals and age. 
+
+The bot intelligently parses messages for key data points, including a multi-line **`CLOSING:`** block for finalizers, "bonk" actions, manual link overrides, and special dispute types, then upserts this data into designated Google Sheets.
+
+The bot also features configurable post-processing actions like attempting to close tickets via another bot (e.g., Ticket Tool).
 
 ## Core Features
 
-*   **Manual & Automatic Processing:**
-    *   **`!record` command:** Manually trigger processing for the current ticket channel. Supports `!record assertion` and `!record disputed` sub-types.
-    *   **Automatic Scanner:** Periodically scans for `ticket-` channels older than a configured age, processes them, and attempts a post-processing action (e.g., close/delete).
-*   **Data Extraction & Parsing:**
-    *   Extracts a numeric **Proposal ID** from channel names (e.g., `ticket-123` -> `123`). This ID is also used for an order column (`#`) in the sheet.
-    *   Finds the latest **Optimistic Oracle (OO) Link** (`https://oracle.uma.xyz/...`).
-    *   Processes the latest message starting with **`CLOSING:`** (case-insensitive):
-        *   Identifies **Primary, Secondary, Tertiary** users (P/S/T) from a comma-separated list. Supports 0-3 users and names with spaces.
-        *   Identifies the **Closer** (author of the `CLOSING:` message).
-        *   Handles special cases: `CLOSING: disputed` (marks as disputed) and `CLOSING: assertion` (sets type to Assertion).
-    *   Parses **"Bonk" actions** from lines within the same `CLOSING:` message (e.g., `Bonker Name bonked Victim Name type`).
-*   **Google Sheets Integration:**
-    *   Uses a designated **Order Column (`#`)** in the sheet (populated with the Proposal ID) to find and update existing rows.
-    *   If a row with the corresponding Order # is not found, a **new row is added** to the end of the sheet.
-*   **Persistent Configuration (`bot_config.json`):**
-    *   Settings for automatic processing, post-processing actions, ticket age, processing interval, and error notification user are stored and loaded from `bot_config.json`.
-    *   Configurable via **Slash Commands (`/config ...`)**.
-*   **Error Handling & Flagging:**
-    *   If critical information (like a `CLOSING:` block) is missing during an automatic scan, the ticket channel will have a "Flag:" message posted by the bot (pinging a configured error user) and will be skipped in future auto-scans.
-    *   Validation errors within a `CLOSING:` block are reported without auto-flagging, allowing for correction.
-*   **Ticket Post-Processing (Configurable):**
-    *   After successful data recording, can attempt to send a command (e.g., `$close` or `$delete`) to Ticket Tool based on configuration.
+*   **Dual Processing Modes:**
+    *   **Ticket Channels (`proposal-`):** Processed automatically by a scanner or manually with `!record`. Data is saved to a primary sheet.
+    *   **Threads:** Processed manually with `!recordt`. Data is saved to a secondary sheet (e.g., "Findoors").
+*   **Intelligent Data Extraction:**
+    *   Extracts a numeric **Proposal ID** from channel names (e.g., `proposal-123` -> `123`).
+    *   Automatically finds the latest **Oracle or Snapshot Link**.
+    *   Processes a multi-line `CLOSING:` message for rich data:
+        *   **Primary/Secondary/Tertiary (P/S/T)** users from a comma-separated list.
+        *   **Closer:** The author of the `CLOSING:` message, resolving their server display name.
+        *   **Manual Overrides:** Users can specify `Link:`, `Type:`, `Alertoor:`, and `bonked` lines within the `CLOSING:` message to ensure data accuracy.
+        *   **Special Types:** Handles `CLOSING: disputed`, `CLOSING: assertion`, `CLOSING: snapshot`, etc., to categorize tickets without P/S/T data.
+        *   **Findoors:** Identifies users marked with `(findoor)` in thread processing.
+*   **Robust Google Sheets Integration:**
+    *   **Tickets Sheet:** Uses a numeric `#` column to find and update existing rows. Adds a new row if not found.
+    *   **Threads Sheet:** Uses the thread name as a unique key to update or insert rows.
+*   **Persistent & Dynamic Configuration (`bot_config.json`):**
+    *   Settings for the automatic scanner, post-processing actions, ticket age, and error notifications are stored locally.
+    *   Fully configurable on-the-fly via powerful **`/config`** slash commands (admin-only).
+*   **Automatic Scanner:**
+    *   Uses an internal `setTimeout` loop, making it more efficient than cron-based systems.
+    *   Scans for `proposal-` channels older than a configured age.
+    *   **Flagging System:** If critical info is missing, the bot posts a "Flag" message (pinging a configured user) and skips the channel in future auto-scans to prevent errors.
+*   **User-Friendly Commands:**
+    *   `!record` / `!recordt` for manual processing with optional sub-types (`disputed`, `assertion`, etc.).
+    *   `/scan_status` to see when the next automatic scan is scheduled.
 
 ## Prerequisites
 
 *   [Node.js](https://nodejs.org/) (v16.x or higher recommended)
 *   [npm](https://www.npmjs.com/) (usually comes with Node.js)
-*   A Discord Bot Application (see [Discord Developer Portal Setup](#discord-developer-portal-setup))
-*   A Google Cloud Platform Project with the Google Sheets API enabled (see [Google Cloud Platform Setup](#google-cloud-platform-setup))
-*   A Google Sheet prepared with the necessary header columns.
+*   A Discord Bot Application
+*   A Google Cloud Platform Project with the Google Sheets API enabled
+*   Two Google Sheets prepared with the necessary header columns (one for tickets, one for threads).
 
 ## Setup and Configuration
 
@@ -110,23 +117,20 @@ GUILD_ID=YOUR_SERVER_ID_FOR_SLASH_COMMAND_TESTING # Optional, for faster slash c
 GOOGLE_SHEET_ID=YOUR_GOOGLE_SHEET_ID
 GOOGLE_SERVICE_ACCOUNT_EMAIL=THE_CLIENT_EMAIL_FROM_CREDENTIALS.JSON
 GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nYOUR_PRIVATE_KEY_FROM_JSON_WITH_\\n_FOR_NEWLINES\n-----END PRIVATE KEY-----\n"
-WORKSHEET_TITLE=Sheet1 # Target tab name in your Google Sheet
+# Target worksheet (tab) names in your Google Sheet
+WORKSHEET_TITLE_MAIN=Verification
+WORKSHEET_TITLE_FINDOOR=Findoors
 
 # Bot Behavior
 COMMAND_PREFIX=!
-DEFAULT_ERROR_USER_ID=USER_ID_TO_PING_ON_FLAGGED_ERRORS # Optional: User ID
-
-# Cron Job for Automatic Scanning
-CRON_WAKE_INTERVAL_EXPRESSION="* * * * *" # Default: Every minute (Bot "wakes up" this often to check)
-# Initial default values for bot_config.json (can be changed via /config commands)
-ENABLE_AUTO_PROCESSING=true # Initial state for auto-processing (true/false)
-DEFAULT_TICKET_POST_ACTION=close # Initial post-processing action ('none', 'close', 'delete')
-# DEFAULT_MIN_TICKET_AGE and DEFAULT_PROCESSING_INTERVAL are hardcoded as initial defaults in index.js if bot_config.json is new
+DEFAULT_TICKET_POST_ACTION=close  # Initial post-processing action: 'none', 'close', or 'delete'
+ENABLE_AUTO_PROCESSING=true       # Initial state for auto-processing: 'true' or 'false'
+DELAY_BETWEEN_TICKETS_MS=5000     # Delay in ms between processing each ticket in a mass scan
+DEFAULT_ERROR_USER_ID=USER_ID_TO_PING_ON_FLAGGED_ERRORS # Optional
 
 # Ticket Tool Commands (if used)
 TICKET_TOOL_CLOSE_COMMAND=$close
 TICKET_TOOL_DELETE_COMMAND=$delete
-DEFAULT_ERROR_USER_ID=
 ```
 
 ### 7. Prepare Your Google Sheet Headers
@@ -149,20 +153,20 @@ Ensure the first row of your target worksheet in Google Sheets contains the foll
  - BONKED 2
  - BONKED 3
 
-### 8. Running the Bot
+### 8. Deploy Slash Commands
+To register the /config and /scan_status commands with Discord, run the deployment script once:
+ - Navigate to the project's root directory in your terminal and run:
+   ```
+   node deploy-commands.js
+   ```
+
+### 9. Running the Bot
 Once all dependencies are installed and the .env file is correctly configured:
- - Navigate to the project's root directory in your terminal.
  - Run the bot using:
    ```
    node index.js
    ```
-You should see console this console logs:
-```
-GoogleSpreadsheet instance created.
-Configuration loaded from bot_config.json.
-UMABot# has connected to Discord and is ready!
-Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
-```
+You should see confirmation logs in your console and the bot will start with a full scan.
 
 ## How the Bot Works (index.js)
 1. **Configuration** (bot_config.json & /config):
@@ -174,22 +178,43 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
     - set_processing_interval [interval: "30m"]: Set how often the bot attempts a full scan of eligible tickets.
     - set_error_user [user: @User]: Designate a user to be pinged on certain errors/flags.
     - view_settings: Display current configurations.
+    - scan_status: Display how much time is left until the next scan. 
 
-2. **Automatic Scanner (Cron Job)**:
-  - "Wakes up" at a fixed interval defined by CRON_WAKE_INTERVAL (from .env, e.g., every minute).
+2. **Automatic Scanner**:
+  - "Wakes up" at a fixed interval defined in set_processing_interval.
   - Checks if autoProcessingEnabled is true.
-  - Checks if enough time has passed since lastSuccessfulScanTimestamp based on processingIntervalMs.
-  - If conditions met, it scans all channels starting with ticket- in the server.
+  - Scans all channels starting with proposal- in the server.
   - For each eligible ticket (older than minTicketAgeForProcessing and not already containing "Flag:"):
     - Calls processTicketChannel.
   - Updates lastSuccessfulScanTimestamp after a scan cycle.
-3. **Manual Processing** (!record):
+3. **Manual Processing** (!record and !recordt):
   - !record: Processes the current ticket channel immediately, regardless of auto-processing state or if previously flagged.
   - !record assertion: Processes as an "Assertion" type, mainly recording OO Link.
-  - !record disputed: Processes as a "Disputed" type, setting the disputed flag.
-4. processTicketChannel **Function (Core Logic)**:
+  - !record disputed: Processes as a "Disputed" type, setting the disputed flag with OO Link
+  - !record assertion: Processes as a "Assertion" type, with OO Link
+  - !record snapshot: Processes as a "Snapshot" type, with OO Link
+  - !record 
+  If we use only !record, it is because we have a CLOSING with information to process
+  All of the above is applicable to !recordt as well for threads
+
+4. **The CLOSING: Message Block**
+  This is the primary way to provide detailed data for manual processing.
+  ```
+  CLOSING: User1, User Two, User3
+  Link: https://some-manual-link.com/if/needed
+  Type: Assertion/Snapshot/Disputed #By default here is Polymarket, so only need to add it if diferent
+  User1 bonked User5 primary/secondary/tertiary
+  ``` 
+
+  On threads you can use (findoor) as well and will add "y (Alertoor: User1)" to the column
+  ```
+  CLOSING: User1 (findoor), User Two, User3
+  Type: Disputed
+  ```
+
+5. processTicketChannel **Function (Core Logic)**:
   - **Flag Check:** For auto-scans, skips if a message starts with "Flag:" or "Ticket data for order" (indicating prior processing/error).
-  - **OO Link Extraction:** Finds the latest https://oracle.uma.xyz/... link.
+  - **OO Link Extraction:** Finds the latest https://oracle.uma.xyz/... or https://snapshot.org/ link.
   - **"CLOSING:" Block Processing:**
     - Finds the latest message starting with CLOSING: (case-insensitive).
     -**Special Cases:**
@@ -202,17 +227,11 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
   -  **Data Recording:** Calls upsertRowByOrderValue.
   - **Discord Summary:** Posts a summary of processed data to the ticket channel.
   - **Post-Processing:** Sends configured close/delete command to Ticket Tool if action is not "none".
-5. **Google Sheets (upsertRowByOrderValue):**
+6. **Google Sheets (upsertRowByOrderValue):**
   - Uses the Order # column (populated with the normalized Proposal ID) to find a row.
   - If found, updates the row.
   - If not found, **adds a new row to the end of the sheet**.
   - Ensures blank cells for empty data instead of "N/A".
-  - /scan_status Command: Allows users with "Manage Messages" permission to see when the next full automatic scan is approximately due.  
-
-## Important Usage Notes
-  - **Manual !record:** Can be used anytime to process/re-process a ticket.
-  - **Automatic Scanner Timing:** Configure minTicketAgeForProcessing and processingIntervalMs via /config commands to control when and how often automatic processing occurs.
-  - **Verification:** Regularly check bot output and Google Sheet data for accuracy, especially after configuration changes or bot updates.
 
 ## Potential Future Enhancements
 **- Comprehensive Database Integration:**
@@ -222,8 +241,7 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
     - Visualizing Statistics: Charts and graphs for ticket processing times, user activity (closers, bonkers), dispute rates, etc.
     - Data Summaries: Customizable reports and summaries.
     - Search for Analytics and Management:
-      - Develop a web application (e.g., using React + Vite for the frontend, and Node.js/Express for a backend API المرضى the database) to:
-      - Visualize statistics derived from the collected ticket data (e.g., processing times, user activity, bonk patterns).
+      - Visualize statistics derived from the collected ticket data.
       - Provide summaries and reports.
       - Offer an interface to search, filter, and view ticket data stored in the database.
       - and Filtering:** Advanced search capabilities for all recorded ticket data.
@@ -234,16 +252,6 @@ Scanner master cron task scheduled: * * * * *. Processing interval: ~1m
       - Implementing these would make the entire data collection and analysis process much faster, more efficient, and direct database queries.
 
 ## Troubleshooting
-  - **"Invalid CRON_WAKE_INTERVAL...":** Ensure CRON_WAKE_INTERVAL_EXPRESSION in .env is a valid 5-field cron string (e.g., * * * * * for every minute). Use crontab.guru.
   - **Slash Commands Not Appearing:** Run node deploy-commands.js. If using GUILD_ID in .env for deploy-commands.js, ensure it's correct. Global commands can take up to an hour to appear.
   - **Config Not Saving/Loading:** Check console for errors related to bot_config.json. Ensure the bot has write permissions in its directory.
   - **Other common issues:** Refer to the troubleshooting section in the previous README version (related to Google Sheets setup, Discord permissions, token errors, etc.).
-
-**Key Updates in this README:**
-
-*   **Features:** Updated to include automatic scanning, `bot_config.json`, slash commands for config, new `CLOSING:` logic, and the "Flagging" behavior.
-*   **`.env` Variables:** Added `BOT_ID`, `GUILD_ID`, and clarified `CRON_WAKE_INTERVAL_EXPRESSION` vs. user-configurable intervals.
-*   **Slash Command Deployment:** Added a dedicated step `8. Deploy Slash Commands`.
-*   **How the Bot Works:** Significantly expanded to explain the new automatic scanner, `bot_config.json`, the `/config` and `/scan_status` commands, and the refined `processTicketChannel` logic for `CLOSING:`, assertions, disputes, and flagging.
-*   **Important Usage Notes:** Updated to reflect manual vs. automatic modes.
-*   **Troubleshooting:** Added a note about `CRON_WAKE_INTERVAL` and slash commands.
