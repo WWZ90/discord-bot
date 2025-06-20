@@ -234,13 +234,18 @@ You should see confirmation logs in your console and the bot will start with a f
   - Ensures blank cells for empty data instead of "N/A".
 
 ## Potential Future Enhancements
-**- Comprehensive Database Integration:**
+  - **Comprehensive Database Integration:**
   This would allow for more complex data integrity rules and better performance under high load.
-**- Web Interface for advanced analytics or direct integration with other backend services.**
-  **Features could include:**
+  - **Web Interface for advanced analytics or direct integration with other backend services.**
+  - **Features could include:**
     - Visualizing Statistics: Charts and graphs for ticket processing times, user activity (closers, bonkers), dispute rates, etc.
     - Data Summaries: Customizable reports and summaries.
+<<<<<<< HEAD
     - Search for Analytics and Management:
+=======
+    - Search for Analytics and Management
+    - Develop a web application to:
+>>>>>>> 5c0fbacd522d241f32694e4a7a096e22329056bf
       - Visualize statistics derived from the collected ticket data.
       - Provide summaries and reports.
       - Offer an interface to search, filter, and view ticket data stored in the database.
@@ -254,4 +259,17 @@ You should see confirmation logs in your console and the bot will start with a f
 ## Troubleshooting
   - **Slash Commands Not Appearing:** Run node deploy-commands.js. If using GUILD_ID in .env for deploy-commands.js, ensure it's correct. Global commands can take up to an hour to appear.
   - **Config Not Saving/Loading:** Check console for errors related to bot_config.json. Ensure the bot has write permissions in its directory.
+<<<<<<< HEAD
   - **Other common issues:** Refer to the troubleshooting section in the previous README version (related to Google Sheets setup, Discord permissions, token errors, etc.).
+=======
+  - **Other common issues:** Refer to the troubleshooting section in the previous README version (related to Google Sheets setup, Discord permissions, token errors, etc.).
+
+**Key Updates in this README:**
+
+*   **Features:** Updated to include automatic scanning, `bot_config.json`, slash commands for config, new `CLOSING:` logic, and the "Flagging" behavior.
+*   **`.env` Variables:** Added `BOT_ID`, `GUILD_ID`, and clarified `CRON_WAKE_INTERVAL_EXPRESSION` vs. user-configurable intervals.
+*   **Slash Command Deployment:** Added a dedicated step `8. Deploy Slash Commands`.
+*   **How the Bot Works:** Significantly expanded to explain the new automatic scanner, `bot_config.json`, the `/config` and `/scan_status` commands, and the refined `processTicketChannel` logic for `CLOSING:`, assertions, disputes, and flagging.
+*   **Important Usage Notes:** Updated to reflect manual vs. automatic modes.
+*   **Troubleshooting:** Added a note about `CRON_WAKE_INTERVAL` and slash commands.
+>>>>>>> 5c0fbacd522d241f32694e4a7a096e22329056bf
