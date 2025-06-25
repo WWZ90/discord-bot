@@ -6,7 +6,7 @@ const { REST } = require("@discordjs/rest");
 const { Routes } = require("discord-api-types/v9");
 
 const BOT_ID = process.env.BOT_ID; // Client ID
-const GUILD_ID = process.env.GUILD_ID; // Optional: Client ID for testing 
+const GUILD_ID = process.env.GUILD_ID; // Optional: Client ID for testing
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 
 if (!BOT_ID || !DISCORD_TOKEN) {
@@ -19,15 +19,19 @@ if (!BOT_ID || !DISCORD_TOKEN) {
 const configCommand = new SlashCommandBuilder()
   .setName("config")
   .setDescription("Configure bot settings for this server.")
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator) 
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
   .addSubcommand((subcommand) =>
     subcommand
       .setName("set_processing_interval")
-      .setDescription("Set how often tickets are processed (e.g., 30m, 1h, 2h30m).")
+      .setDescription(
+        "Set how often tickets are processed (e.g., 30m, 1h, 2h30m)."
+      )
       .addStringOption((option) =>
         option
           .setName("interval")
-          .setDescription("Processing interval (e.g., '30m', '1h', '90m'). Min 1 minute.")
+          .setDescription(
+            "Processing interval (e.g., '30m', '1h', '90m'). Min 1 minute."
+          )
           .setRequired(true)
       )
   )
@@ -95,7 +99,23 @@ const scanStatusCommand = new SlashCommandBuilder()
   .setDescription("Shows when the next automatic ticket scan is scheduled.")
   .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator);
 
-const commands = [configCommand.toJSON(), scanStatusCommand.toJSON()];
+const statsCommand = new SlashCommandBuilder()
+  .setName("stats")
+  .setDescription("Get statistics from the processed data.")
+  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("closers")
+      .setDescription("Counts how many tickets each user has closed.")
+      .addIntegerOption((option) =>
+        option
+          .setName("start_order")
+          .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
+  );
+
+const commands = [configCommand.toJSON(), scanStatusCommand.toJSON(), statsCommand.toJSON()];
 
 const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
