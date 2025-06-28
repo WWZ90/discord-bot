@@ -112,6 +112,69 @@ function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
+async function getStatsForColumn(columnName, startOrder) {
+  if (
+    !GOOGLE_SHEET_ID ||
+    !GOOGLE_SERVICE_ACCOUNT_EMAIL ||
+    !GOOGLE_PRIVATE_KEY
+  ) {
+    throw new Error("Master Sheet environment variables are not configured.");
+  }
+
+  const serviceAccountAuth = new JWT({
+    email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: GOOGLE_PRIVATE_KEY.replace(/\\n/g, "\n"),
+    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
+  });
+
+  const masterDoc = new GoogleSpreadsheet(
+    GOOGLE_SHEET_ID,
+    serviceAccountAuth
+  );
+
+  await masterDoc.loadInfo();
+  const sheet = masterDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
+  if (!sheet) {
+    throw new Error(
+      `Worksheet "${WORKSHEET_TITLE_MAIN}" not found in the master sheet.`
+    );
+  }
+
+  const rows = await sheet.getRows();
+  const counts = {};
+
+  for (const row of rows) {
+    const orderNum = parseInt(row.get(ORDER_COLUMN_HEADER), 10);
+    const value = row.get(columnName)?.trim();
+
+    if (!isNaN(orderNum) && orderNum >= startOrder && value) {
+      counts[value] = (counts[value] || 0) + 1;
+    }
+  }
+
+  const sortedData = Object.entries(counts).sort(([, a], [, b]) => b - a);
+
+  if (sortedData.length === 0) {
+    return `No data found for column "${columnName}" starting from order #${startOrder}.`;
+  }
+
+  let responseMessage = `**${capitalizeFirstLetter(
+    columnName
+  )} Stats (from Master Sheet, Order #${startOrder})**\n\`\`\`\n`;
+  for (const [name, count] of sortedData) {
+    responseMessage += `${name.padEnd(20, " ")}: ${count}\n`;
+  }
+  responseMessage += "```";
+
+  if (responseMessage.length > 2000) {
+    responseMessage =
+      responseMessage.substring(0, 1990) +
+      "...\n```\n(List too long to display fully)";
+  }
+
+  return responseMessage;
+}
+
 function parseClosingBlock(lines) {
   const bonkersInMessageText = [];
   const bonkedUsersData = {
@@ -155,7 +218,13 @@ function parseClosingBlock(lines) {
     }
   }
 
-  return { bonkersInMessageText, bonkedUsersData, manualLink, manualType, alertoorUser };
+  return {
+    bonkersInMessageText,
+    bonkedUsersData,
+    manualLink,
+    manualType,
+    alertoorUser,
+  };
 }
 
 async function loadConfig() {
@@ -633,13 +702,13 @@ async function processTicketChannel(
       } else {
         const users = contentRaw
           ? contentRaw
-              .split(",")
+              .split(/[.,]/) 
               .map((n) => n.trim())
               .filter(Boolean)
           : [];
         if (users.length > 3) {
           validationErrorMessages.push(
-            `Error: "CLOSING:" max 3 users. Found: ${users.length}.`
+            `Error: "CLOSING:" line max 3 P/S/T users. Found: ${users.length}.`
           );
         }
         primaryUser = users[0] || "";
@@ -1017,7 +1086,7 @@ async function processThread(
       } else {
         const usersRaw = closingLineContentRaw
           ? closingLineContentRaw
-              .split(",")
+              .split(/[.,]/) 
               .map((n) => n.trim())
               .filter(Boolean)
           : [];
@@ -1617,7 +1686,7 @@ client.on("interactionCreate", async (interaction) => {
         ephemeral: true,
       });
     }
-  } else if (commandName === "stats") { 
+  } else if (commandName === "stats") {
     if (
       !interaction.memberPermissions.has(
         PermissionsBitField.Flags.ManageMessages
@@ -1630,59 +1699,28 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const subCommand = interaction.options.getSubcommand();
-    
-    if (subCommand === "closers") {
+    const startOrder = interaction.options.getInteger("start_order") ?? 0;
+
+    // Mapeamos el subcomando al nombre exacto de la columna en la hoja de cálculo
+    const columnMap = {
+      closers: "Closer",
+      primary: "Primary",
+      secondary: "Secondary",
+      tertiary: "Tertiary",
+    };
+
+    const targetColumn = columnMap[subCommand];
+
+    if (targetColumn) {
       await interaction.deferReply({ ephemeral: true });
-
-      const startOrder = interaction.options.getInteger("start_order") ?? 0;
-
       try {
-        if (!googleDoc) {
-          throw new Error("Google Sheets not initialized.");
-        }
-
-        await googleDoc.loadInfo();
-        const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
-        if (!sheet) {
-          throw new Error(`Worksheet "${WORKSHEET_TITLE_MAIN}" not found.`);
-        }
-
-        const rows = await sheet.getRows();
-        
-        const closerCounts = {};
-
-        for (const row of rows) {
-          const orderNum = parseInt(row.get(ORDER_COLUMN_HEADER), 10);
-          const closerName = row.get("Closer")?.trim();
-
-          if (!isNaN(orderNum) && orderNum >= startOrder && closerName) {
-            closerCounts[closerName] = (closerCounts[closerName] || 0) + 1;
-          }
-        }
-        
-        const sortedClosers = Object.entries(closerCounts).sort(([, a], [, b]) => b - a);
-
-        if (sortedClosers.length === 0) {
-          await interaction.editReply({
-            content: `No closing data found starting from order #${startOrder}.`,
-          });
-          return;
-        }
-
-        let responseMessage = `**Closer Stats (from Order #${startOrder})**\n\`\`\`\n`;
-        for (const [name, count] of sortedClosers) {
-          responseMessage += `${name.padEnd(20, ' ')}: ${count}\n`;
-        }
-        responseMessage += "```";
-        
-        if (responseMessage.length > 2000) {
-            responseMessage = responseMessage.substring(0, 1990) + "...\n```\n(List too long to display fully)";
-        }
-        
+        const responseMessage = await getStatsForColumn(
+          targetColumn,
+          startOrder
+        );
         await interaction.editReply({ content: responseMessage });
-
       } catch (error) {
-        console.error("Error fetching stats:", error);
+        console.error(`Error fetching stats for ${targetColumn}:`, error);
         await interaction.editReply({
           content: `An error occurred while fetching stats: ${error.message}`,
         });

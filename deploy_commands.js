@@ -113,6 +113,39 @@ const statsCommand = new SlashCommandBuilder()
           .setDescription("Optional: The order # to start counting from.")
           .setRequired(false)
       )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("primary")
+      .setDescription("Counts how many tickets each user has participated in as Primary.")
+      .addIntegerOption((option) =>
+        option
+          .setName("start_order")
+          .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("secondary")
+      .setDescription("Counts how many tickets each user has participated in as Secondary.")
+      .addIntegerOption((option) =>
+        option
+          .setName("start_order")
+          .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("tertiary")
+      .setDescription("Counts how many tickets each user has participated in as Tertiary.")
+      .addIntegerOption((option) =>
+        option
+          .setName("start_order")
+          .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
   );
 
 const commands = [configCommand.toJSON(), scanStatusCommand.toJSON(), statsCommand.toJSON()];
