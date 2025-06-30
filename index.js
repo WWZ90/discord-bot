@@ -127,10 +127,7 @@ async function getStatsForColumn(columnName, startOrder) {
     scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
   });
 
-  const masterDoc = new GoogleSpreadsheet(
-    GOOGLE_SHEET_ID,
-    serviceAccountAuth
-  );
+  const masterDoc = new GoogleSpreadsheet(GOOGLE_SHEET_ID, serviceAccountAuth);
 
   await masterDoc.loadInfo();
   const sheet = masterDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
@@ -176,7 +173,7 @@ async function getStatsForColumn(columnName, startOrder) {
 }
 
 function parseClosingBlock(lines) {
-  const bonkersInMessageText = [];
+  const bonkersList = [];
   const bonkedUsersData = {
     primary: new Set(),
     secondary: new Set(),
@@ -192,20 +189,14 @@ function parseClosingBlock(lines) {
   for (const line of lines) {
     const trimmedLine = line.trim();
     if (!trimmedLine) continue;
-
     const lowerCaseLine = trimmedLine.toLowerCase();
     const bonkMatch = lowerCaseLine.match(bonkPattern);
 
     if (bonkMatch) {
-      const rawBonker = bonkMatch[1].trim();
-      const rawVictim = bonkMatch[2].trim();
+      const bonker = capitalizeFirstLetter(bonkMatch[1].trim());
+      const victim = capitalizeFirstLetter(bonkMatch[2].trim());
       const type = bonkMatch[3].toLowerCase();
-
-      const bonker = capitalizeFirstLetter(rawBonker);
-      const victim = capitalizeFirstLetter(rawVictim);
-
-      if (bonkersInMessageText.length < 5) bonkersInMessageText.push(bonker);
-
+      bonkersList.push(bonker);
       if (type === "primary") bonkedUsersData.primary.add(victim);
       else if (type === "secondary") bonkedUsersData.secondary.add(victim);
       else if (type === "tertiary") bonkedUsersData.tertiary.add(victim);
@@ -218,13 +209,7 @@ function parseClosingBlock(lines) {
     }
   }
 
-  return {
-    bonkersInMessageText,
-    bonkedUsersData,
-    manualLink,
-    manualType,
-    alertoorUser,
-  };
+  return { bonkersList, bonkedUsersData, manualLink, manualType, alertoorUser };
 }
 
 async function loadConfig() {
@@ -702,7 +687,7 @@ async function processTicketChannel(
       } else {
         const users = contentRaw
           ? contentRaw
-              .split(/[.,]/) 
+              .split(/[.,]/)
               .map((n) => n.trim())
               .filter(Boolean)
           : [];
@@ -717,10 +702,11 @@ async function processTicketChannel(
       }
 
       const closingData = parseClosingBlock(lines);
-      bonkersInMessageText.push(...closingData.bonkersInMessageText);
       bonkedUsersData.primary = closingData.bonkedUsersData.primary;
       bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
       bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+
+      bonkersInMessageText.push(...closingData.bonkersList);
 
       if (closingData.manualLink) {
         ooLink = closingData.manualLink;
@@ -796,7 +782,7 @@ async function processTicketChannel(
       "bonker 2": bonkersInMessageText[1] || "",
       "bonker 3": bonkersInMessageText[2] || "",
       "bonker 4": bonkersInMessageText[3] || "",
-      "bonker 5": bonkersInMessageText[4] || "",
+      "bonker 5": bonkersInMessageText.slice(4).join(", ") || "",
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
@@ -1086,7 +1072,7 @@ async function processThread(
       } else {
         const usersRaw = closingLineContentRaw
           ? closingLineContentRaw
-              .split(/[.,]/) 
+              .split(/[.,]/)
               .map((n) => n.trim())
               .filter(Boolean)
           : [];
@@ -1113,10 +1099,11 @@ async function processThread(
       }
 
       const closingData = parseClosingBlock(messageContentLines);
-      bonkersInMessageText.push(...closingData.bonkersInMessageText);
       bonkedUsersData.primary = closingData.bonkedUsersData.primary;
       bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
       bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+
+      bonkersInMessageText.push(...closingData.bonkersList);
 
       if (closingData.manualLink) {
         ooLink = closingData.manualLink;
@@ -1186,7 +1173,7 @@ async function processThread(
       "bonker 2": bonkersInMessageText[1] || "",
       "bonker 3": bonkersInMessageText[2] || "",
       "bonker 4": bonkersInMessageText[3] || "",
-      "bonker 5": bonkersInMessageText[4] || "",
+      "bonker 5": bonkersInMessageText.slice(4).join(", ") || "",
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
