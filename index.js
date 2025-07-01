@@ -924,15 +924,6 @@ async function processThread(
         return null;
       });
 
-    if (!starterMessage) {
-      await threadChannel.send(
-        `Flag: Could not fetch starter message for OO Link reference. <@${
-          botConfig.errorNotificationUserID || ""
-        }>`
-      );
-      return { success: false, reason: "no_starter_message" };
-    }
-
     const referenceLinkMatch = starterMessage.content.match(
       /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/
     );
@@ -940,59 +931,47 @@ async function processThread(
       console.log(
         `${logPrefix} No Discord message link found in starter message.`
       );
-      await threadChannel.send(
-        `Flag: No reference link in starter message for OO Link. <@${
-          botConfig.errorNotificationUserID || ""
-        }>`
-      );
-      return { success: false, reason: "no_reference_link_in_starter" };
-    }
-
-    const [, linkedChannelId, linkedMessageId] = referenceLinkMatch;
-    try {
-      const linkedChannel = await client.channels.fetch(linkedChannelId);
-      if (!linkedChannel || !linkedChannel.isTextBased()) {
-        await threadChannel.send(
-          `Flag: Linked channel ID ${linkedChannelId} not valid. <@${
-            botConfig.errorNotificationUserID || ""
-          }>`
-        );
-        return { success: false, reason: "linked_channel_not_text" };
-      }
-      const feedMessage = await linkedChannel.messages.fetch(linkedMessageId);
-
-      let foundLink = null;
-      if (feedMessage.embeds && feedMessage.embeds.length > 0) {
-        for (const embed of feedMessage.embeds) {
-          foundLink =
-            findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
-          if (foundLink) break;
-          if (embed.fields && embed.fields.length > 0) {
-            for (const field of embed.fields) {
-              foundLink = findValidLinkIn(field.value);
-              if (foundLink) break;
-            }
-          }
-          if (foundLink) break;
+    } else {
+      const [, linkedChannelId, linkedMessageId] = referenceLinkMatch;
+      try {
+        const linkedChannel = await client.channels.fetch(linkedChannelId);
+        if (!linkedChannel || !linkedChannel.isTextBased()) {
+          await threadChannel.send(
+            `Flag: Linked channel ID ${linkedChannelId} not valid. <@${
+              botConfig.errorNotificationUserID || ""
+            }>`
+          );
+          return { success: false, reason: "linked_channel_not_text" };
         }
+        const feedMessage = await linkedChannel.messages.fetch(linkedMessageId);
+
+        let foundLink = null;
+        if (feedMessage.embeds && feedMessage.embeds.length > 0) {
+          for (const embed of feedMessage.embeds) {
+            foundLink =
+              findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
+            if (foundLink) break;
+            if (embed.fields && embed.fields.length > 0) {
+              for (const field of embed.fields) {
+                foundLink = findValidLinkIn(field.value);
+                if (foundLink) break;
+              }
+            }
+            if (foundLink) break;
+          }
+        }
+        if (!foundLink) {
+          foundLink = findValidLinkIn(feedMessage.content);
+        }
+        if (foundLink) {
+          ooLink = foundLink;
+        }
+      } catch (err) {
+        console.error(
+          `${logPrefix} Error fetching/processing linked message for OO Link:`,
+          err
+        );
       }
-      if (!foundLink) {
-        foundLink = findValidLinkIn(feedMessage.content);
-      }
-      if (foundLink) {
-        ooLink = foundLink;
-      }
-    } catch (err) {
-      console.error(
-        `${logPrefix} Error fetching/processing linked message for OO Link:`,
-        err
-      );
-      await threadChannel.send(
-        `Flag: Error retrieving OO Link from linked message. <@${
-          botConfig.errorNotificationUserID || ""
-        }>`
-      );
-      return { success: false, reason: "error_fetching_linked_oolink" };
     }
 
     const threadMessages = await threadChannel.messages.fetch({ limit: 100 });
