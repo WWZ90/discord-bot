@@ -5,6 +5,7 @@ const {
   Partials,
   PermissionsBitField,
   ChannelType,
+  MessageFlags
 } = require("discord.js");
 const { GoogleSpreadsheet } = require("google-spreadsheet");
 const { JWT } = require("google-auth-library");
