@@ -1458,7 +1458,7 @@ client.on("interactionCreate", async (interaction) => {
   const { commandName } = interaction;
   if (commandName === "config") {
     if (typeof botConfig === "undefined" || typeof saveConfig === "undefined") {
-      return interaction.reply({ content: "Config error.", ephemeral: true });
+      return interaction.reply({ content: "Config error.", flags: MessageFlags.Ephemeral });
     }
     const subCommand = interaction.options.getSubcommand();
     if (
@@ -1466,7 +1466,7 @@ client.on("interactionCreate", async (interaction) => {
         PermissionsBitField.Flags.Administrator
       )
     ) {
-      return interaction.reply({ content: "Admin only.", ephemeral: true });
+      return interaction.reply({ content: "Admin only.", flags: MessageFlags.Ephemeral });
     }
     let configChanged = false;
 
@@ -1478,7 +1478,7 @@ client.on("interactionCreate", async (interaction) => {
       }
       await interaction.reply({
         content: `Post processing action: **${botConfig.currentPostProcessingAction}**.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } else if (subCommand === "toggle_auto_processing") {
       const newState = interaction.options.getBoolean("enabled");
@@ -1503,7 +1503,7 @@ client.on("interactionCreate", async (interaction) => {
         content: `Auto processing: **${
           botConfig.autoProcessingEnabled ? "on" : "off"
         }**.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } else if (subCommand === "set_min_ticket_age") {
       const ageStr = interaction.options.getString("age");
@@ -1517,12 +1517,12 @@ client.on("interactionCreate", async (interaction) => {
           content: `Min ticket age: **${ageStr}** (~${Math.round(
             ms / 60000
           )}m).`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else
         await interaction.reply({
           content: `Invalid age: "${ageStr}". Use "2h5m", "30m", "1d", "125" (mins).`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
     } else if (subCommand === "set_processing_interval") {
       const intervalString = interaction.options.getString("interval");
@@ -1540,12 +1540,12 @@ client.on("interactionCreate", async (interaction) => {
           content: `Ticket processing interval set to: **${intervalString}** (~${Math.round(
             parsedMs / 60000
           )} minutes). Next scan cycle adjusted.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         await interaction.reply({
           content: `Invalid interval: "${intervalString}". Use "30m", "1h", etc. Min 1 minute.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } else if (subCommand === "set_error_user") {
@@ -1557,7 +1557,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         await interaction.reply({
           content: `Error pings will target: **${user.tag}** (<@${user.id}>).`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       } else {
         if (botConfig.errorNotificationUserID !== null) {
@@ -1566,7 +1566,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         await interaction.reply({
           content: `Error ping user cleared.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
       }
     } else if (subCommand === "view_settings") {
@@ -1606,12 +1606,12 @@ client.on("interactionCreate", async (interaction) => {
           `- Default Post Processing Action: **${botConfig.currentPostProcessingAction}**\n` +
           `- Min Ticket Age for Auto-Processing: **${ageM} minutes**\n` +
           `- Error Notification User: **${errU}**`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } else
       await interaction.reply({
         content: "Unknown config subcmd.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     if (configChanged) {
       await saveConfig(false);
@@ -1624,20 +1624,20 @@ client.on("interactionCreate", async (interaction) => {
     ) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
     if (!botConfig.autoProcessingEnabled) {
       return interaction.reply({
         content: "Automatic ticket processing is currently **disabled**.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
     if (isMassScanInProgress) {
       return interaction.reply({
         content: "A mass scan is **currently in progress**.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -1650,13 +1650,13 @@ client.on("interactionCreate", async (interaction) => {
       await interaction.reply({
         content:
           "A ticket scan is due and should start very soon (within the next minute).",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     } else {
       const timeRemainingReadable = formatMsToHumanReadable(timeRemainingMs);
       await interaction.reply({
         content: `Next full ticket scan is scheduled **${timeRemainingReadable}**.`,
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
   } else if (commandName === "stats") {
@@ -1667,7 +1667,7 @@ client.on("interactionCreate", async (interaction) => {
     ) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
-        ephemeral: true,
+        flags: MessageFlags.Ephemeral,
       });
     }
 
@@ -1685,7 +1685,7 @@ client.on("interactionCreate", async (interaction) => {
     const targetColumn = columnMap[subCommand];
 
     if (targetColumn) {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
       try {
         const responseMessage = await getStatsForColumn(
           targetColumn,
