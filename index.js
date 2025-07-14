@@ -1274,6 +1274,13 @@ async function performMassScan() {
         } eligible ticket(s) for processing.`
       );
 
+      console.log("Sorting tickets by proposal number...");
+      channelsToProcess.sort((a, b) => {
+        const numA = parseInt(a.name.split("-")[1]) || 0;
+        const numB = parseInt(b.name.split("-")[1]) || 0;
+        return numA - numB;
+      });
+
       for (let i = 0; i < channelsToProcess.length; i++) {
         const channel = channelsToProcess[i];
         if (currentlyProcessingChannels.has(channel.id)) {
