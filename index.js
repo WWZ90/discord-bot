@@ -5,7 +5,7 @@ const {
   Partials,
   PermissionsBitField,
   ChannelType,
-  MessageFlags
+  MessageFlags,
 } = require("discord.js");
 const { GoogleSpreadsheet } = require("google-spreadsheet");
 const { JWT } = require("google-auth-library");
@@ -925,7 +925,8 @@ async function processThread(
         return null;
       });
 
-    const referenceLinkMatch = starterMessage.content.match(
+    /*
+      const referenceLinkMatch = starterMessage.content.match(
       /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/
     );
     if (!referenceLinkMatch) {
@@ -972,6 +973,56 @@ async function processThread(
           `${logPrefix} Error fetching/processing linked message for OO Link:`,
           err
         );
+      }
+    }
+    */
+
+    ooLink = findValidLinkIn(starterMessage.content);
+    if (!ooLink && starterMessage.embeds.length > 0) {
+      for (const embed of starterMessage.embeds) {
+        let foundLink =
+          findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
+        if (foundLink) {
+          ooLink = foundLink;
+          break;
+        }
+      }
+    }
+
+    if (!ooLink) {
+      const referenceLinkMatch = starterMessage.content.match(
+        /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/
+      );
+      if (referenceLinkMatch) {
+        const [, linkedChannelId, linkedMessageId] = referenceLinkMatch;
+        try {
+          const linkedChannel = await client.channels.fetch(linkedChannelId);
+          if (linkedChannel && linkedChannel.isTextBased()) {
+            const feedMessage = await linkedChannel.messages.fetch(
+              linkedMessageId
+            );
+            let foundLinkInReferenced = findValidLinkIn(feedMessage.content);
+            if (!foundLinkInReferenced && feedMessage.embeds.length > 0) {
+              for (const embed of feedMessage.embeds) {
+                let foundLinkInEmbed =
+                  findValidLinkIn(embed.url) ||
+                  findValidLinkIn(embed.description);
+                if (foundLinkInEmbed) {
+                  foundLinkInReferenced = foundLinkInEmbed;
+                  break;
+                }
+              }
+            }
+            if (foundLinkInReferenced) {
+              ooLink = foundLinkInReferenced;
+            }
+          }
+        } catch (err) {
+          console.error(
+            `${logPrefix} Error fetching referenced message for link:`,
+            err
+          );
+        }
       }
     }
 
@@ -1459,7 +1510,10 @@ client.on("interactionCreate", async (interaction) => {
   const { commandName } = interaction;
   if (commandName === "config") {
     if (typeof botConfig === "undefined" || typeof saveConfig === "undefined") {
-      return interaction.reply({ content: "Config error.", flags: MessageFlags.Ephemeral });
+      return interaction.reply({
+        content: "Config error.",
+        flags: MessageFlags.Ephemeral,
+      });
     }
     const subCommand = interaction.options.getSubcommand();
     if (
@@ -1467,7 +1521,10 @@ client.on("interactionCreate", async (interaction) => {
         PermissionsBitField.Flags.Administrator
       )
     ) {
-      return interaction.reply({ content: "Admin only.", flags: MessageFlags.Ephemeral });
+      return interaction.reply({
+        content: "Admin only.",
+        flags: MessageFlags.Ephemeral,
+      });
     }
     let configChanged = false;
 
