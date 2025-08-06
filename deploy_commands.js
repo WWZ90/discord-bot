@@ -113,6 +113,12 @@ const statsCommand = new SlashCommandBuilder()
           .setDescription("Optional: The order # to start counting from.")
           .setRequired(false)
       )
+      .addIntegerOption((option) =>
+        option
+          .setName("end_order")
+          .setDescription("Optional: The order # to end counting at.")
+          .setRequired(false)
+      )
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -122,6 +128,12 @@ const statsCommand = new SlashCommandBuilder()
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("end_order")
+          .setDescription("Optional: The order # to end counting at.")
           .setRequired(false)
       )
   )
@@ -135,6 +147,12 @@ const statsCommand = new SlashCommandBuilder()
           .setDescription("Optional: The order # to start counting from.")
           .setRequired(false)
       )
+      .addIntegerOption((option) => 
+        option
+          .setName("end_order")
+          .setDescription("Optional: The order # to end counting at.")
+          .setRequired(false)
+      )
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -144,6 +162,12 @@ const statsCommand = new SlashCommandBuilder()
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
+          .setRequired(false)
+      )
+      .addIntegerOption((option) =>
+        option
+          .setName("end_order")
+          .setDescription("Optional: The order # to end counting at.")
           .setRequired(false)
       )
   );

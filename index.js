@@ -113,7 +113,7 @@ function capitalizeFirstLetter(string) {
   return string.charAt(0).toUpperCase() + string.slice(1);
 }
 
-async function getStatsForColumn(columnName, startOrder) {
+async function getStatsForColumn(columnName, startOrder, endOrder) {
   if (
     !GOOGLE_SHEET_ID ||
     !GOOGLE_SERVICE_ACCOUNT_EMAIL ||
@@ -145,15 +145,26 @@ async function getStatsForColumn(columnName, startOrder) {
     const orderNum = parseInt(row.get(ORDER_COLUMN_HEADER), 10);
     const value = row.get(columnName)?.trim();
 
-    if (!isNaN(orderNum) && orderNum >= startOrder && value) {
+    if (!isNaN(orderNum) && orderNum >= startOrder && orderNum <= endOrder && value) {
       counts[value] = (counts[value] || 0) + 1;
     }
   }
 
   const sortedData = Object.entries(counts).sort(([, a], [, b]) => b - a);
 
+  let rangeText = "";
+  if (startOrder === 0 && endOrder === Infinity) {
+    rangeText = "(All Orders)";
+  } else if (endOrder === Infinity) {
+    rangeText = `(from Order #${startOrder})`;
+  } else if (startOrder === 0) {
+    rangeText = `(up to Order #${endOrder})`;
+  } else {
+    rangeText = `(from Order #${startOrder} to #${endOrder})`;
+  }
+
   if (sortedData.length === 0) {
-    return `No data found for column "${columnName}" starting from order #${startOrder}.`;
+    return `No data found for column "${columnName}" in the specified range ${rangeText}.`;
   }
 
   let responseMessage = `**${capitalizeFirstLetter(
@@ -1731,6 +1742,7 @@ client.on("interactionCreate", async (interaction) => {
 
     const subCommand = interaction.options.getSubcommand();
     const startOrder = interaction.options.getInteger("start_order") ?? 0;
+    const endOrder = interaction.options.getInteger("end_order") ?? Infinity;
 
     // Mapeamos el subcomando al nombre exacto de la columna en la hoja de cálculo
     const columnMap = {
@@ -1747,7 +1759,8 @@ client.on("interactionCreate", async (interaction) => {
       try {
         const responseMessage = await getStatsForColumn(
           targetColumn,
-          startOrder
+          startOrder,
+          endOrder
         );
         await interaction.editReply({ content: responseMessage });
       } catch (error) {
