@@ -167,9 +167,7 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
     return `No data found for column "${columnName}" in the specified range ${rangeText}.`;
   }
 
-  let responseMessage = `**${capitalizeFirstLetter(
-    columnName
-  )} Stats (from Master Sheet, Order #${startOrder})**\n\`\`\`\n`;
+  let responseMessage = `**${capitalizeFirstLetter(columnName)} Stats ${rangeText}**\n\`\`\`\n`;
   for (const [name, count] of sortedData) {
     responseMessage += `${name.padEnd(20, " ")}: ${count}\n`;
   }
