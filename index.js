@@ -557,6 +557,7 @@ async function processTicketChannel(
       ? client.user.username
       : initiatedBy.split(" by ")[1] || initiatedBy;
   let disputedColumn = "";
+  let disputeAlertoor = "";
   const bonkersInMessageText = [];
   const bonkedUsersData = {
     primary: new Set(),
@@ -645,6 +646,7 @@ async function processTicketChannel(
       bonkedUsersData.secondary.clear();
       bonkedUsersData.tertiary.clear();
       disputedColumn = "";
+      disputeAlertoor = "";
       closingBlockFoundAndProcessed = true;
 
       if (recordType === "assertion") {
@@ -731,9 +733,10 @@ async function processTicketChannel(
         );
       }
       if (closingData.alertoorUser) {
-        disputedColumn = `y (Alertoor: ${closingData.alertoorUser})`;
+        //disputedColumn = `y (Alertoor: ${closingData.alertoorUser})`;
+        disputeAlertoor = closingData.alertoorUser;
         console.log(
-          `${logPrefix} Disputed column set by Alertoor: ${closingData.alertoorUser}`
+          `${logPrefix} Dispute alertoor column set by Alertoor: ${closingData.alertoorUser}`
         );
       }
     }
@@ -785,17 +788,30 @@ async function processTicketChannel(
       Primary: primaryUser,
       Secondary: secondaryUser,
       Tertiary: terciaryUser,
-      Closer: closerUser,
-      Recorder: recorderUser,
+      "fully-verified (3)": "",
+      "Complete in liveness (y/n)": "",
       "Disputed? (y?)": disputedColumn,
+      "fully verified (y/n)": "",
+      "KPI hit? (y/n)": "",
+      "dispute alertoor": disputeAlertoor,
+      "proposal findoor": "", //Proposal findoor is empty here,
       "bonker 1": bonkersInMessageText[0] || "",
       "bonker 2": bonkersInMessageText[1] || "",
       "bonker 3": bonkersInMessageText[2] || "",
       "bonker 4": bonkersInMessageText[3] || "",
-      "bonker 5": bonkersInMessageText.slice(4).join(", ") || "",
+      "bonker 5": bonkersInMessageText[4] || "",
+      "bonker 6": bonkersInMessageText[5] || "",
+      "bonker 7": bonkersInMessageText[6] || "",
+      "bonker 8": bonkersInMessageText[7] || "",
+      "bonker 9": bonkersInMessageText[8] || "",
+      "bonker 10": bonkersInMessageText[9] || "",
+      "bonker 11": bonkersInMessageText.slice(10).join(", ") || "",
+      "Paid?": "",
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
+      Closer: closerUser,
+      Recorder: recorderUser,
     };
     if (!googleDoc) {
       console.error(`${logPrefix} Sheets not configured.`);
