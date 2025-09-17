@@ -192,6 +192,7 @@ function parseClosingBlock(lines) {
   let manualLink = null;
   let manualType = null;
   let alertoorUser = null;
+  let manualFindoor = null;
 
   const bonkPattern =
     /^(.*?)\s+bonked\s+(.*?)\s+(primary|secondary|tertiary)$/i;
@@ -216,10 +217,12 @@ function parseClosingBlock(lines) {
       manualType = trimmedLine.substring(5).trim();
     } else if (lowerCaseLine.startsWith("alertoor:")) {
       alertoorUser = capitalizeFirstLetter(trimmedLine.substring(9).trim());
+    } else if (lowerCaseLine.startsWith("findoor:")) { 
+      manualFindoor = capitalizeFirstLetter(trimmedLine.substring(8).trim());
     }
   }
 
-  return { bonkersList, bonkedUsersData, manualLink, manualType, alertoorUser };
+  return { bonkersList, bonkedUsersData, manualLink, manualType, alertoorUser, manualFindoor };
 }
 
 async function loadConfig() {
@@ -855,6 +858,7 @@ async function processTicketChannel(
             : TICKET_TOOL_CLOSE_COMMAND_TEXT;
         if (cmd) {
           try {
+            await new Promise(resolve => setTimeout(resolve, 2000));
             await channel.send(cmd);
             console.log(`${logPrefix} Sent: ${cmd}`);
           } catch (e) {
@@ -1178,6 +1182,10 @@ async function processThread(
         console.log(
           `${logPrefix} Disputed column set by Alertoor: ${closingData.alertoorUser}`
         );
+      }
+      if (closingData.manualFindoor) {
+        findoorUsers.add(closingData.manualFindoor);
+        console.log(`${logPrefix} Findoor added from CLOSING message: ${closingData.manualFindoor}`);
       }
     }
 
