@@ -188,6 +188,7 @@ function parseClosingBlock(lines) {
     primary: new Set(),
     secondary: new Set(),
     tertiary: new Set(),
+    btertiary: new Set(),
   };
   let manualLink = null;
   let manualType = null;
@@ -195,7 +196,7 @@ function parseClosingBlock(lines) {
   let manualFindoor = null;
 
   const bonkPattern =
-    /^(.*?)\s+bonked\s+(.*?)\s+(primary|secondary|tertiary)$/i;
+    /^(.*?)\s+bonked\s+(.*?)\s+(primary|secondary|tertiary|btertiary)$/i;
 
   for (const line of lines) {
     const trimmedLine = line.trim();
@@ -211,6 +212,7 @@ function parseClosingBlock(lines) {
       if (type === "primary") bonkedUsersData.primary.add(victim);
       else if (type === "secondary") bonkedUsersData.secondary.add(victim);
       else if (type === "tertiary") bonkedUsersData.tertiary.add(victim);
+      else if (type === "btertiary") bonkedUsersData.btertiary.add(victim);
     } else if (lowerCaseLine.startsWith("link:")) {
       manualLink = trimmedLine.substring(5).trim();
     } else if (lowerCaseLine.startsWith("type:")) {
@@ -566,6 +568,7 @@ async function processTicketChannel(
     primary: new Set(),
     secondary: new Set(),
     tertiary: new Set(),
+    btertiary: new Set(),
   };
   let validationErrorMessages = [];
 
@@ -648,6 +651,7 @@ async function processTicketChannel(
       bonkedUsersData.primary.clear();
       bonkedUsersData.secondary.clear();
       bonkedUsersData.tertiary.clear();
+      bonkedUsersData.btertiary.clear();
       disputedColumn = "";
       disputeAlertoor = "";
       closingBlockFoundAndProcessed = true;
@@ -720,6 +724,7 @@ async function processTicketChannel(
       bonkedUsersData.primary = closingData.bonkedUsersData.primary;
       bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
       bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+      bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
 
       bonkersInMessageText.push(...closingData.bonkersList);
 
@@ -813,6 +818,7 @@ async function processTicketChannel(
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
+      "BONKED 4": Array.from(bonkedUsersData.btertiary).join(", ") || "",
       Closer: closerUser,
       Recorder: recorderUser,
     };
@@ -844,11 +850,12 @@ async function processTicketChannel(
           }\n` +
           `**Closer:** ${closerUser || "-"}, **Recorder:** ${recorderUser}\n` +
           `**Bonkers:** ${bonkersInMessageText.join(", ") || "None"}\n` +
-          `**BONKED P/S/T:** P:[${
+          `**BONKED P/S/T/BT:** P:[${
             Array.from(bonkedUsersData.primary).join(", ") || "N"
           }] S:[${
             Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"}]`;
+          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"
+          }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
       }
       await channel.send(resp);
       if (botConfig.currentPostProcessingAction !== "none") {
@@ -931,6 +938,7 @@ async function processThread(
     primary: new Set(),
     secondary: new Set(),
     tertiary: new Set(),
+    btertiary: new Set(),
   };
   let validationErrorMessages = [];
 
@@ -1074,6 +1082,7 @@ async function processThread(
       bonkedUsersData.primary.clear();
       bonkedUsersData.secondary.clear();
       bonkedUsersData.tertiary.clear();
+      bonkedUsersData.btertiary.clear();
       disputedColumn = "";
       closingBlockFoundAndProcessed = true;
 
@@ -1162,6 +1171,7 @@ async function processThread(
       bonkedUsersData.primary = closingData.bonkedUsersData.primary;
       bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
       bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+      bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
 
       bonkersInMessageText.push(...closingData.bonkersList);
 
@@ -1241,6 +1251,7 @@ async function processThread(
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
+      "BONKED 4": Array.from(bonkedUsersData.btertiary).join(", ") || "",
       "Type (PM / Snap, etc)": typeColumn,
     };
 
@@ -1273,11 +1284,12 @@ async function processThread(
           `**Findoor(s):** ${Array.from(findoorUsers).join(", ") || "None"}\n` +
           `**Closer:** ${closerUser || "-"}, **Recorder:** ${recorderUser}\n` +
           `**Bonkers:** ${bonkersInMessageText.join(", ") || "None"}\n` +
-          `**BONKED P/S/T:** P:[${
+          `**BONKED P/S/T/BT:** P:[${
             Array.from(bonkedUsersData.primary).join(", ") || "N"
           }] S:[${
             Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"}]`;
+          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"
+          }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
       }
       await threadChannel.send(resp);
       return { success: true, action: result.action };
