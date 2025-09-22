@@ -170,6 +170,11 @@ const statsCommand = new SlashCommandBuilder()
           .setDescription("Optional: The order # to end counting at.")
           .setRequired(false)
       )
+  )
+  .addSubcommand((subcommand) => 
+    subcommand
+      .setName("pending_tickets_queue")
+      .setDescription("Shows the current queue of fallback threads waiting to be created.")
   );
 
 const commands = [configCommand.toJSON(), scanStatusCommand.toJSON(), statsCommand.toJSON()];

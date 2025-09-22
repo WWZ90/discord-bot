@@ -22,6 +22,14 @@ const GOOGLE_PRIVATE_KEY = GOOGLE_PRIVATE_KEY_RAW
   ? GOOGLE_PRIVATE_KEY_RAW.replace(/\\n/g, "\n")
   : undefined;
 
+const TICKET_TOOL_USER_ID = process.env.TICKET_TOOL_USER_ID;
+const OO_LIVE_FEED_CHANNEL_ID = process.env.OO_LIVE_FEED_CHANNEL_ID;
+const FAILED_TICKETS_FORUM_ID = process.env.FAILED_TICKETS_FORUM_ID;
+
+const pendingTicketTimers = new Map();
+const fallbackQueue = [];
+let isProcessingFallbackQueue = false;
+
 const WORKSHEET_TITLE_MAIN = process.env.WORKSHEET_TITLE_MAIN || "Sheet1";
 const PROPOSAL_COLUMN_HEADER = "Proposal";
 const ORDER_COLUMN_HEADER = "#";
@@ -145,7 +153,12 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
     const orderNum = parseInt(row.get(ORDER_COLUMN_HEADER), 10);
     const value = row.get(columnName)?.trim();
 
-    if (!isNaN(orderNum) && orderNum >= startOrder && orderNum <= endOrder && value) {
+    if (
+      !isNaN(orderNum) &&
+      orderNum >= startOrder &&
+      orderNum <= endOrder &&
+      value
+    ) {
       counts[value] = (counts[value] || 0) + 1;
     }
   }
@@ -167,7 +180,9 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
     return `No data found for column "${columnName}" in the specified range ${rangeText}.`;
   }
 
-  let responseMessage = `**${capitalizeFirstLetter(columnName)} Stats ${rangeText}**\n\`\`\`\n`;
+  let responseMessage = `**${capitalizeFirstLetter(
+    columnName
+  )} Stats ${rangeText}**\n\`\`\`\n`;
   for (const [name, count] of sortedData) {
     responseMessage += `${name.padEnd(20, " ")}: ${count}\n`;
   }
@@ -219,12 +234,19 @@ function parseClosingBlock(lines) {
       manualType = trimmedLine.substring(5).trim();
     } else if (lowerCaseLine.startsWith("alertoor:")) {
       alertoorUser = capitalizeFirstLetter(trimmedLine.substring(9).trim());
-    } else if (lowerCaseLine.startsWith("findoor:")) { 
+    } else if (lowerCaseLine.startsWith("findoor:")) {
       manualFindoor = capitalizeFirstLetter(trimmedLine.substring(8).trim());
     }
   }
 
-  return { bonkersList, bonkedUsersData, manualLink, manualType, alertoorUser, manualFindoor };
+  return {
+    bonkersList,
+    bonkedUsersData,
+    manualLink,
+    manualType,
+    alertoorUser,
+    manualFindoor,
+  };
 }
 
 async function loadConfig() {
@@ -854,7 +876,8 @@ async function processTicketChannel(
             Array.from(bonkedUsersData.primary).join(", ") || "N"
           }] S:[${
             Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"
+          }] T:[${
+            Array.from(bonkedUsersData.tertiary).join(", ") || "N"
           }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
       }
       await channel.send(resp);
@@ -865,7 +888,7 @@ async function processTicketChannel(
             : TICKET_TOOL_CLOSE_COMMAND_TEXT;
         if (cmd) {
           try {
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 2000));
             await channel.send(cmd);
             console.log(`${logPrefix} Sent: ${cmd}`);
           } catch (e) {
@@ -1195,7 +1218,9 @@ async function processThread(
       }
       if (closingData.manualFindoor) {
         findoorUsers.add(closingData.manualFindoor);
-        console.log(`${logPrefix} Findoor added from CLOSING message: ${closingData.manualFindoor}`);
+        console.log(
+          `${logPrefix} Findoor added from CLOSING message: ${closingData.manualFindoor}`
+        );
       }
     }
 
@@ -1288,7 +1313,8 @@ async function processThread(
             Array.from(bonkedUsersData.primary).join(", ") || "N"
           }] S:[${
             Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${Array.from(bonkedUsersData.tertiary).join(", ") || "N"
+          }] T:[${
+            Array.from(bonkedUsersData.tertiary).join(", ") || "N"
           }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
       }
       await threadChannel.send(resp);
@@ -1488,6 +1514,75 @@ function scheduleNextScan() {
 }
 
 client.on("messageCreate", async (message) => {
+  if (message.channel.id === OO_LIVE_FEED_CHANNEL_ID && message.author.bot) {
+    let marketLink = null;
+    let fullTextContent = message.content;
+
+    if (message.embeds && message.embeds.length > 0) {
+      const embed = message.embeds[0];
+      if (embed.description) {
+        fullTextContent += " " + embed.description;
+        marketLink = findValidLinkIn(embed.description);
+      }
+      if (!marketLink && embed.url) {
+        marketLink = findValidLinkIn(embed.url);
+      }
+    }
+
+    if (!marketLink) {
+      marketLink = findValidLinkIn(message.content);
+    }
+
+    if (marketLink) {
+      const transactionHashMatch = marketLink.match(/transactionHash=([^&]+)/);
+      const eventIndexMatch = marketLink.match(/eventIndex=(\d+)/);
+      const titleMatch = fullTextContent.match(
+        /q:\s*title:\s*(.*?)(?=\s*,\s*description:)/
+      );
+
+      if (
+        transactionHashMatch?.[1] &&
+        eventIndexMatch?.[1] &&
+        titleMatch?.[1]
+      ) {
+        const transactionHash = transactionHashMatch[1];
+        const eventIndex = eventIndexMatch[1];
+
+        const uniqueId = `${transactionHash}-${eventIndex}`;
+
+        const marketTitle = titleMatch[1].trim();
+
+        console.log(
+          `[Supervisor] Detected new market in #oo-live-feed: ${marketTitle} (ID: ${uniqueId})`
+        );
+
+        if (pendingTicketTimers.has(uniqueId)) {
+          console.log(
+            `[Supervisor] Timer already exists for ID ${uniqueId}. Ignoring.`
+          );
+          return;
+        }
+
+        console.log(`[Supervisor] Starting 20-minute timer.`);
+        const timerId = setTimeout(() => {
+          createFallbackThread(uniqueId);
+        }, 20 * 60 * 1000);
+
+        pendingTicketTimers.set(uniqueId, {
+          timerId: timerId,
+          messageLink: message.url,
+          title: marketTitle,
+        });
+      } else {
+        console.log(`[Supervisor] Could not extract full data.
+              - Hash found: ${transactionHashMatch?.[1] ? "Yes" : "No"}
+              - Index found: ${eventIndexMatch?.[1] ? "Yes" : "No"}
+              - Title match found: ${titleMatch?.[1] ? "Yes" : "No"}`);
+      }
+    }
+    return;
+  }
+
   if (message.author.bot && message.author.id !== client.user.id) return;
   if (!message.guild || !message.content.startsWith(PREFIX)) return;
   const args = message.content.slice(PREFIX.length).trim().split(/ +/);
@@ -1549,6 +1644,146 @@ client.on("messageCreate", async (message) => {
     );
   }
 });
+
+client.on("channelCreate", async (channel) => {
+  if (channel.name.toLowerCase().startsWith("proposal-")) {
+    const logPrefix = `[Supervisor][${channel.name}]`;
+    console.log(
+      `${logPrefix} New proposal channel detected. Waiting for Ticket Tool message...`
+    );
+
+    setTimeout(async () => {
+      try {
+        const messages = await channel.messages.fetch({ limit: 10 });
+        let hashFoundInNewChannel = false;
+        let ticketToolMessage = null;
+
+        for (const msg of messages.values()) {
+          if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
+            ticketToolMessage = msg;
+            break;
+          }
+        }
+
+        if (!ticketToolMessage) {
+          console.log(
+            `${logPrefix} WARNING: Ticket Tool message not found after 5 seconds. Cannot cancel any timer for this channel.`
+          );
+          return;
+        }
+
+        console.log(`${logPrefix} Found Ticket Tool message.`);
+
+        const embedContent = ticketToolMessage.embeds[0].description || "";
+        const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
+        const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
+
+        if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+          hashFoundInNewChannel = true;
+
+          const transactionHash = txHashMatch[1];
+          const eventIndex = eventIndexMatch[1];
+          const uniqueId = `${transactionHash}-${eventIndex}`;
+
+          console.log(`${logPrefix} Hash: ${transactionHash}`);
+
+          if (pendingTicketTimers.has(uniqueId)) {
+            const { timerId, title } = pendingTicketTimers.get(uniqueId);
+            clearTimeout(timerId);
+            pendingTicketTimers.delete(uniqueId);
+            console.log(
+              `${logPrefix} SUCCESS: Timer cancelled for "${title}" (ID: ${uniqueId})`
+            );
+            return;
+          } else {
+            console.log(
+              `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it did not match any pending timers.`
+            );
+          }
+        } else {
+          console.log(
+            `${logPrefix} WARNING: Could not extract a full transactionHash and eventIndex from the Ticket Tool message.`
+          );
+        }
+      } catch (e) {
+        console.error(
+          `${logPrefix} Error fetching messages in new channel:`,
+          e
+        );
+      }
+    }, 5 * 1000);
+  }
+});
+
+async function createFallbackThread(uniqueId) {
+  if (!pendingTicketTimers.has(uniqueId)) {
+    console.log(
+      `[Supervisor] Fallback attempted for ID ${uniqueId} but it was already cleared.`
+    );
+    return;
+  }
+
+  const { messageLink, title } = pendingTicketTimers.get(uniqueId);
+  pendingTicketTimers.delete(uniqueId);
+
+  console.log(`[Supervisor] TIMER EXPIRED for "${title}" (ID: ${uniqueId}).`);
+  console.log(
+    `[Supervisor] Ticket Tool FAILED to create the ticket. Proceeding to create fallback thread.`
+  );
+
+  fallbackQueue.push({ messageLink, title });
+
+  processFallbackQueue();
+}
+
+async function processFallbackQueue() {
+  if (isProcessingFallbackQueue || fallbackQueue.length === 0) {
+    return;
+  }
+
+  isProcessingFallbackQueue = true;
+  console.log(
+    `[Supervisor] Starting to process fallback queue. ${fallbackQueue.length} items pending.`
+  );
+
+  while (fallbackQueue.length > 0) {
+    const { messageLink, title } = fallbackQueue.shift();
+
+    const targetChannel = await client.channels
+      .fetch(FAILED_TICKETS_FORUM_ID)
+      .catch(() => null);
+
+    try {
+      console.log(`[Supervisor] Creating fallback thread for "${title}"`);
+      const starterMessage = await targetChannel.send(
+        `This ticket did not create after 20 mins ${messageLink}`
+      );
+
+      await starterMessage.startThread({
+        name: title,
+      });
+
+      console.log(
+        `[Supervisor] SUCCESS: Fallback thread created for "${title}".`
+      );
+    } catch (error) {
+      console.error(
+        `[Supervisor] ERROR: Failed to create fallback thread for "${title}":`,
+        error
+      );
+    }
+
+    if (fallbackQueue.length > 0) {
+      console.log(
+        `[Supervisor] Waiting 5 seconds before processing next item in queue...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+    }
+  }
+
+  isProcessingFallbackQueue = false;
+  console.log("[Supervisor] Fallback queue processed successfully.");
+}
 
 client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
@@ -1775,6 +2010,33 @@ client.on("interactionCreate", async (interaction) => {
     }
 
     const subCommand = interaction.options.getSubcommand();
+
+    if (subCommand === "pending_tickets_queue") {
+      let response = `**Fallback Thread Creation Queue Status**\n\n`;
+
+      if (isProcessingFallbackQueue) {
+        response += "🔹 **Status:** Currently processing the queue.\n";
+      } else {
+        response += "🔹 **Status:** Idle, waiting for new items.\n";
+      }
+
+      response += `🔹 **Items in Queue:** ${fallbackQueue.length}\n\n`;
+
+      if (fallbackQueue.length > 0) {
+        response += "```\n";
+        // Mostramos solo los primeros 10 para no exceder el límite de caracteres
+        for (let i = 0; i < Math.min(fallbackQueue.length, 10); i++) {
+          response += `${i + 1}. ${fallbackQueue[i].title}\n`;
+        }
+        response += "```";
+        if (fallbackQueue.length > 10) {
+          response += `\n*...and ${fallbackQueue.length - 10} more.*`;
+        }
+      }
+
+      return interaction.reply({ content: response, ephemeral: true });
+    }
+
     const startOrder = interaction.options.getInteger("start_order") ?? 0;
     const endOrder = interaction.options.getInteger("end_order") ?? Infinity;
 
