@@ -27,8 +27,9 @@ const OO_LIVE_FEED_CHANNEL_ID = process.env.OO_LIVE_FEED_CHANNEL_ID;
 const FAILED_TICKETS_FORUM_ID = process.env.FAILED_TICKETS_FORUM_ID;
 
 let lastTicketToolActivityTimestamp = Date.now();
-const FALLBACK_QUEUE_PROCESS_INTERVAL_MS = 60 * 1000; // 1 minuto
-const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos
+const FALLBACK_QUEUE_PROCESS_INTERVAL_MS = 60 * 1000;
+const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000;
+const MIN_AGE_FOR_FALLBACK_CHECK_MS = 20 * 60 * 1000;
 
 const fallbackQueue = [];
 let isProcessingFallbackQueue = false;
@@ -1720,7 +1721,7 @@ client.on("channelCreate", async (channel) => {
 
 async function processFallbackQueue() {
   if (isProcessingFallbackQueue || fallbackQueue.length === 0) {
-    return; 
+    return;
   }
 
   const now = Date.now();
@@ -1780,7 +1781,7 @@ async function processFallbackQueue() {
           `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
           error
         );
-        fallbackQueue.push(item); 
+        fallbackQueue.push(item);
       }
 
       if (itemsToProcess.length > 1) {
