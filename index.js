@@ -26,9 +26,14 @@ const TICKET_TOOL_USER_ID = process.env.TICKET_TOOL_USER_ID;
 const OO_LIVE_FEED_CHANNEL_ID = process.env.OO_LIVE_FEED_CHANNEL_ID;
 const FAILED_TICKETS_FORUM_ID = process.env.FAILED_TICKETS_FORUM_ID;
 
-const pendingTicketTimers = new Map();
+let lastTicketToolActivityTimestamp = Date.now();
+const FALLBACK_QUEUE_PROCESS_INTERVAL_MS = 60 * 1000; // 1 minuto
+const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000; // 2 minutos
+
 const fallbackQueue = [];
 let isProcessingFallbackQueue = false;
+
+const pendingTicketTimers = new Map();
 
 const WORKSHEET_TITLE_MAIN = process.env.WORKSHEET_TITLE_MAIN || "Sheet1";
 const PROPOSAL_COLUMN_HEADER = "Proposal";
@@ -1552,26 +1557,26 @@ client.on("messageCreate", async (message) => {
 
         const marketTitle = titleMatch[1].trim();
 
-        console.log(
-          `[Supervisor] Detected new market in #oo-live-feed: ${marketTitle} (ID: ${uniqueId})`
+        const existingItem = fallbackQueue.find(
+          (item) => item.uniqueId === uniqueId
         );
-
-        if (pendingTicketTimers.has(uniqueId)) {
+        if (existingItem) {
           console.log(
-            `[Supervisor] Timer already exists for ID ${uniqueId}. Ignoring.`
+            `[Supervisor] Item with ID ${uniqueId} already in queue. Ignoring.`
           );
           return;
         }
 
-        console.log(`[Supervisor] Starting 20-minute timer.`);
-        const timerId = setTimeout(() => {
-          createFallbackThread(uniqueId);
-        }, 20 * 60 * 1000);
+        console.log(
+          `[Supervisor] Detected new market in oo-feed-live. Adding "${marketTitle}" with ID "${uniqueId}" to fallback queue.`
+        );
 
-        pendingTicketTimers.set(uniqueId, {
-          timerId: timerId,
+        // --- MODIFICACIÓN CLAVE: NO MÁS setTimeout ---
+        fallbackQueue.push({
+          uniqueId: uniqueId,
           messageLink: message.url,
           title: marketTitle,
+          timestamp: Date.now(), // Guardamos cuándo llegó
         });
       } else {
         console.log(`[Supervisor] Could not extract full data.
@@ -1647,15 +1652,15 @@ client.on("messageCreate", async (message) => {
 
 client.on("channelCreate", async (channel) => {
   if (channel.name.toLowerCase().startsWith("proposal-")) {
+    lastTicketToolActivityTimestamp = Date.now();
     const logPrefix = `[Supervisor][${channel.name}]`;
     console.log(
-      `${logPrefix} New proposal channel detected. Waiting for Ticket Tool message...`
+      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Waiting for Ticket Tool message...`
     );
 
     setTimeout(async () => {
       try {
-        const messages = await channel.messages.fetch({ limit: 10 });
-        let hashFoundInNewChannel = false;
+        const messages = await channel.messages.fetch({ limit: 20 });
         let ticketToolMessage = null;
 
         for (const msg of messages.values()) {
@@ -1667,7 +1672,7 @@ client.on("channelCreate", async (channel) => {
 
         if (!ticketToolMessage) {
           console.log(
-            `${logPrefix} WARNING: Ticket Tool message not found after 5 seconds. Cannot cancel any timer for this channel.`
+            `${logPrefix} WARNING: Ticket Tool message not found after 5 seconds.`
           );
           return;
         }
@@ -1679,30 +1684,28 @@ client.on("channelCreate", async (channel) => {
         const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
 
         if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
-          hashFoundInNewChannel = true;
-
           const transactionHash = txHashMatch[1];
           const eventIndex = eventIndexMatch[1];
           const uniqueId = `${transactionHash}-${eventIndex}`;
 
           console.log(`${logPrefix} Hash: ${transactionHash}`);
 
-          if (pendingTicketTimers.has(uniqueId)) {
-            const { timerId, title } = pendingTicketTimers.get(uniqueId);
-            clearTimeout(timerId);
-            pendingTicketTimers.delete(uniqueId);
+          const indexToRemove = fallbackQueue.findIndex(
+            (item) => item.uniqueId === uniqueId
+          );
+          if (indexToRemove > -1) {
+            const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
             console.log(
-              `${logPrefix} SUCCESS: Timer cancelled for "${title}" (ID: ${uniqueId})`
+              `${logPrefix} SUCCESS: Removed "${removedItem.title}" (ID: ${uniqueId}) from fallback queue.`
             );
-            return;
           } else {
             console.log(
-              `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it did not match any pending timers.`
+              `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it was not in the pending queue (already processed or cleared).`
             );
           }
         } else {
           console.log(
-            `${logPrefix} WARNING: Could not extract a full transactionHash and eventIndex from the Ticket Tool message.`
+            `${logPrefix} WARNING: Could not extract full ID from the Ticket Tool message.`
           );
         }
       } catch (e) {
@@ -1715,74 +1718,79 @@ client.on("channelCreate", async (channel) => {
   }
 });
 
-async function createFallbackThread(uniqueId) {
-  if (!pendingTicketTimers.has(uniqueId)) {
-    console.log(
-      `[Supervisor] Fallback attempted for ID ${uniqueId} but it was already cleared.`
-    );
-    return;
-  }
-
-  const { messageLink, title } = pendingTicketTimers.get(uniqueId);
-  pendingTicketTimers.delete(uniqueId);
-
-  console.log(`[Supervisor] TIMER EXPIRED for "${title}" (ID: ${uniqueId}).`);
-  console.log(
-    `[Supervisor] Ticket Tool FAILED to create the ticket. Proceeding to create fallback thread.`
-  );
-
-  fallbackQueue.push({ messageLink, title });
-
-  processFallbackQueue();
-}
-
 async function processFallbackQueue() {
   if (isProcessingFallbackQueue || fallbackQueue.length === 0) {
-    return;
+    return; 
   }
 
-  isProcessingFallbackQueue = true;
-  console.log(
-    `[Supervisor] Starting to process fallback queue. ${fallbackQueue.length} items pending.`
-  );
+  const now = Date.now();
+  const timeSinceLastTTActivity = now - lastTicketToolActivityTimestamp;
 
-  while (fallbackQueue.length > 0) {
-    const { messageLink, title } = fallbackQueue.shift();
+  if (timeSinceLastTTActivity > TICKET_TOOL_INACTIVITY_THRESHOLD_MS) {
+    const itemsToProcess = fallbackQueue.filter(
+      (item) => now - item.timestamp > MIN_AGE_FOR_FALLBACK_CHECK_MS
+    );
 
-    const targetChannel = await client.channels
-      .fetch(FAILED_TICKETS_FORUM_ID)
-      .catch(() => null);
-
-    try {
-      console.log(`[Supervisor] Creating fallback thread for "${title}"`);
-      const starterMessage = await targetChannel.send(
-        `This ticket did not create after 20 mins ${messageLink}`
-      );
-
-      await starterMessage.startThread({
-        name: title,
-      });
-
-      console.log(
-        `[Supervisor] SUCCESS: Fallback thread created for "${title}".`
-      );
-    } catch (error) {
-      console.error(
-        `[Supervisor] ERROR: Failed to create fallback thread for "${title}":`,
-        error
-      );
+    if (itemsToProcess.length === 0) {
+      return;
     }
 
-    if (fallbackQueue.length > 0) {
-      console.log(
-        `[Supervisor] Waiting 5 seconds before processing next item in queue...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+    isProcessingFallbackQueue = true;
+    console.log(
+      `[Supervisor] Ticket Tool has been inactive for over ${
+        TICKET_TOOL_INACTIVITY_THRESHOLD_MS / 60000
+      } minutes.`
+    );
+    console.log(
+      `[Supervisor] Found ${itemsToProcess.length} items older than ${
+        MIN_AGE_FOR_FALLBACK_CHECK_MS / 60000
+      } minutes. Starting fallback creation...`
+    );
+
+    const idsToProcess = new Set(itemsToProcess.map((item) => item.uniqueId));
+    const newFallbackQueue = fallbackQueue.filter(
+      (item) => !idsToProcess.has(item.uniqueId)
+    );
+
+    fallbackQueue.length = 0;
+    fallbackQueue.push(...newFallbackQueue);
+
+    for (const item of itemsToProcess) {
+      const targetChannel = await client.channels
+        .fetch(FAILED_TICKETS_FORUM_ID)
+        .catch(() => null);
+
+      try {
+        console.log(
+          `[Supervisor] Creating fallback thread for "${item.title}"...`
+        );
+        const starterMessage = await targetChannel.send(
+          `This ticket did not create after 20 mins ${item.messageLink}`
+        );
+
+        await starterMessage.startThread({
+          name: item.title,
+        });
+
+        console.log(
+          `[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`
+        );
+      } catch (error) {
+        console.error(
+          `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
+          error
+        );
+        fallbackQueue.push(item); 
+      }
+
+      if (itemsToProcess.length > 1) {
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+      }
     }
+
+    isProcessingFallbackQueue = false;
+    console.log("[Supervisor] Finished processing fallback queue.");
   }
-
-  isProcessingFallbackQueue = false;
-  console.log("[Supervisor] Fallback queue processed successfully.");
 }
 
 client.on("interactionCreate", async (interaction) => {
@@ -2104,6 +2112,14 @@ async function initializeBot() {
       );
     }
   });
+
+  setInterval(processFallbackQueue, FALLBACK_QUEUE_PROCESS_INTERVAL_MS);
+  console.log(
+    `[Supervisor] Fallback queue processor started. Checking every ${
+      FALLBACK_QUEUE_PROCESS_INTERVAL_MS / 1000
+    } seconds.`
+  );
+
   client.login(DISCORD_TOKEN).catch((err) => {
     console.error("Failed to log into Discord:", err);
     if (
