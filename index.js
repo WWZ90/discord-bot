@@ -32,6 +32,7 @@ const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000;
 const MIN_AGE_FOR_FALLBACK_CHECK_MS = 20 * 60 * 1000;
 
 const fallbackQueue = [];
+const channelsToRecheck = new Set();
 let isProcessingFallbackQueue = false;
 
 const pendingTicketTimers = new Map();
@@ -1656,7 +1657,7 @@ client.on("channelCreate", async (channel) => {
     lastTicketToolActivityTimestamp = Date.now();
     const logPrefix = `[Supervisor][${channel.name}]`;
     console.log(
-      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Waiting for Ticket Tool message...`
+      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Checking for Ticket Tool message in 10s...`
     );
 
     setTimeout(async () => {
@@ -1673,8 +1674,9 @@ client.on("channelCreate", async (channel) => {
 
         if (!ticketToolMessage) {
           console.log(
-            `${logPrefix} WARNING: Ticket Tool message not found after 5 seconds.`
+            `${logPrefix} WARNING: Ticket Tool message not found on first check. Adding to re-check list.`
           );
+          channelsToRecheck.add(channel.id);
           return;
         }
 
@@ -1708,20 +1710,83 @@ client.on("channelCreate", async (channel) => {
           console.log(
             `${logPrefix} WARNING: Could not extract full ID from the Ticket Tool message.`
           );
+          channelsToRecheck.add(channel.id);
         }
       } catch (e) {
         console.error(
           `${logPrefix} Error fetching messages in new channel:`,
           e
         );
+        channelsToRecheck.add(channel.id);
       }
-    }, 5 * 1000);
+    }, 10 * 1000);
   }
 });
 
 async function processFallbackQueue() {
-  if (isProcessingFallbackQueue || fallbackQueue.length === 0) {
+  if (
+    isProcessingFallbackQueue ||
+    (fallbackQueue.length === 0 && channelsToRecheck.size === 0)
+  ) {
     return;
+  }
+
+  if (channelsToRecheck.size > 0) {
+    console.log(
+      `[Supervisor] Performing double check on ${channelsToRecheck.size} suspicious channels...`
+    );
+    const recheckedIds = new Set(channelsToRecheck); 
+
+    for (const channelId of recheckedIds) {
+      try {
+        const channel = await client.channels.fetch(channelId);
+        const messages = await channel.messages.fetch({ limit: 100 });
+        let foundAndCleared = false;
+        for (const msg of messages.values()) {
+          if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
+            const embedContent = msg.embeds[0].description || "";
+            const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
+            const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
+
+            if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+              const transactionHash = txHashMatch[1];
+              const eventIndex = eventIndexMatch[1];
+              const uniqueId = `${transactionHash}-${eventIndex}`;
+
+              const indexToRemove = fallbackQueue.findIndex(
+                (item) => item.uniqueId === uniqueId
+              );
+              if (indexToRemove > -1) {
+                const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+                console.log(
+                  `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
+                );
+                foundAndCleared = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!foundAndCleared) {
+          console.log(
+            `[Supervisor] DOUBLE CHECK FAILS (No Ticket Tool message found): Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
+          );
+        }
+
+        channelsToRecheck.delete(channelId);
+      } catch (error) {
+        console.error(
+          `[Supervisor] Error during double check for channel ID ${channelId}:`,
+          error
+        );
+        // Si el canal fue eliminado o es inaccesible, lo quitamos de la lista.
+        if (error.code === 10003) {
+          // Unknown Channel
+          channelsToRecheck.delete(channelId);
+        }
+      }
+    }
   }
 
   const now = Date.now();
