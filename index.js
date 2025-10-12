@@ -88,6 +88,24 @@ function findValidLinkIn(text) {
   return url;
 }
 
+function withTimeout(promise, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Operation timed out after ${ms} ms`));
+    }, ms);
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
 function parseDurationToMs(durationString) {
   if (!durationString || typeof durationString !== "string") return null;
   let totalMs = 0;
@@ -419,7 +437,7 @@ async function upsertRowByOrderValue(
     };
   }
   try {
-    await googleDoc.loadInfo();
+    await withTimeout(googleDoc.loadInfo(), 30000);
     const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
     if (!sheet) {
       console.error(
@@ -443,7 +461,7 @@ async function upsertRowByOrderValue(
       };
     }
 
-    const rows = await sheet.getRows();
+    const rows = await withTimeout(sheet.getRows(), 30000);
     let targetRow = null;
     const orderValueString = orderValueToFind.toString();
     for (const row of rows) {
@@ -463,12 +481,12 @@ async function upsertRowByOrderValue(
       for (const key in dataForSheet) {
         targetRow.set(key, dataForSheet[key]);
       }
-      await targetRow.save();
+      await withTimeout(targetRow.save(), 30000);
       console.log(`${logPrefix} Row updated successfully.`);
       return { success: true, action: "updated" };
     } else {
       console.log(`${logPrefix} No row found. Adding new row...`);
-      await sheet.addRow(dataForSheet);
+      await withTimeout(sheet.addRow(dataForSheet), 30000);
       console.log(`${logPrefix} New row added successfully.`);
       return { success: true, action: "added" };
     }
@@ -895,7 +913,7 @@ async function processTicketChannel(
             : TICKET_TOOL_CLOSE_COMMAND_TEXT;
         if (cmd) {
           try {
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+            await new Promise((resolve) => setTimeout(resolve, 500));
             await channel.send(cmd);
             console.log(`${logPrefix} Sent: ${cmd}`);
           } catch (e) {
@@ -1657,7 +1675,7 @@ client.on("channelCreate", async (channel) => {
     lastTicketToolActivityTimestamp = Date.now();
     const logPrefix = `[Supervisor][${channel.name}]`;
     console.log(
-      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Checking for Ticket Tool message in 10s...`
+      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Checking for Ticket Tool message in 5s...`
     );
 
     setTimeout(async () => {
@@ -1719,7 +1737,7 @@ client.on("channelCreate", async (channel) => {
         );
         channelsToRecheck.add(channel.id);
       }
-    }, 10 * 1000);
+    }, 5 * 1000);
   }
 });
 
@@ -1735,7 +1753,7 @@ async function processFallbackQueue() {
     console.log(
       `[Supervisor] Performing double check on ${channelsToRecheck.size} suspicious channels...`
     );
-    const recheckedIds = new Set(channelsToRecheck); 
+    const recheckedIds = new Set(channelsToRecheck);
 
     for (const channelId of recheckedIds) {
       try {
