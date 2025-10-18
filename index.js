@@ -1756,54 +1756,47 @@ async function processFallbackQueue() {
     const recheckedIds = new Set(channelsToRecheck);
 
     for (const channelId of recheckedIds) {
+      let foundAndCleared = false;
       try {
-        const channel = await client.channels.fetch(channelId);
-        const messages = await channel.messages.fetch({ limit: 100 });
-        let foundAndCleared = false;
-        for (const msg of messages.values()) {
-          if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
-            const embedContent = msg.embeds[0].description || "";
-            const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
-            const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
+          const channel = await client.channels.fetch(channelId);
+          const messages = await channel.messages.fetch({ limit: 100 });
+          
+          for (const msg of messages.values()) {
+              if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
+                  const embedContent = msg.embeds[0].description || "";
+                  const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
+                  const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
 
-            if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
-              const transactionHash = txHashMatch[1];
-              const eventIndex = eventIndexMatch[1];
-              const uniqueId = `${transactionHash}-${eventIndex}`;
-
-              const indexToRemove = fallbackQueue.findIndex(
-                (item) => item.uniqueId === uniqueId
-              );
-              if (indexToRemove > -1) {
-                const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-                console.log(
-                  `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
-                );
-                foundAndCleared = true;
-                break;
+                  if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+                      const uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+                      const indexToRemove = fallbackQueue.findIndex(
+                          (item) => item.uniqueId === uniqueId
+                      );
+                      if (indexToRemove > -1) {
+                          const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+                          console.log(
+                              `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
+                          );
+                          foundAndCleared = true;
+                          break;
+                      }
+                  }
               }
-            }
           }
-        }
 
-        if (!foundAndCleared) {
-          console.log(
-            `[Supervisor] DOUBLE CHECK FAILS (No Ticket Tool message found): Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
-          );
-        }
-
-        channelsToRecheck.delete(channelId);
+          if (!foundAndCleared) {
+              console.log(
+                  `[Supervisor] DOUBLE CHECK NOTE: No matching pending item was found in the queue for channel with ID ${channelId}.`
+              );
+          }
       } catch (error) {
-        console.error(
-          `[Supervisor] Error during double check for channel ID ${channelId}:`,
-          error
-        );
-        // Si el canal fue eliminado o es inaccesible, lo quitamos de la lista.
-        if (error.code === 10003) {
-          // Unknown Channel
+          console.error(
+              `[Supervisor] Error during double check for channel ID ${channelId}:`,
+              error
+          );
+      } finally {
           channelsToRecheck.delete(channelId);
-        }
-      }
+      }  
     }
   }
 
