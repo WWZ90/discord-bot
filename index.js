@@ -703,24 +703,27 @@ async function processTicketChannel(
     let manualClosingMessage = null;
 
     if (initiatedBy === "Automatic Scan") {
-      for (const msg of allMessages.values()) {
+      for (const msg of allMessages) {
         const lowerContent = msg.content.toLowerCase();
-        if (
-          lowerContent.startsWith("flag:") ||
-          lowerContent.startsWith("ticket data for order")
-        ) {
-          console.log(
-            `${logPrefix} Found "Flag:" or previous processing summary. Skipping auto-scan.`
-          );
-          return { success: false, reason: "flagged_or_processed" };
+
+        if (lowerContent.startsWith("ticket data for order")) {
+            console.log(`${logPrefix} Found previous processing summary. Aborting.`);
+            return { success: false, reason: "already_processed" };
         }
+
+        if (lowerContent.startsWith("flag:") && msg.author.id !== client.user.id) {
+            console.log(`${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`);
+            return { success: false, reason: "manual_flag_found" };
+        }
+
         if (lowerContent.includes("bonk")) {
-          bonkFound = true;
+            bonkFound = true;
         }
+
         if (lowerContent.startsWith("closing:") && !msg.author.bot) {
-          if (!manualClosingMessage) manualClosingMessage = msg;
+            manualClosingMessage = msg;
         }
-      }
+    }
     }
 
     ooLink = "";
@@ -1214,22 +1217,25 @@ async function processThread(
     let manualClosingMessage = null;
 
     for (const msg of allMessages) {
-      const lowerContent = msg.content.toLowerCase();
-      if (
-        lowerContent.startsWith("flag:") ||
-        lowerContent.startsWith("thread data for")
-      ) {
-        console.log(
-          `${logPrefix} Found "Flag:" or previous processing summary. Aborting.`
-        );
-        return { success: false, reason: "flagged_or_processed" };
-      }
-      if (lowerContent.includes("bonk")) {
-        bonkFound = true;
-      }
-      if (lowerContent.startsWith("closing:") && !msg.author.bot) {
-        if (!manualClosingMessage) manualClosingMessage = msg;
-      }
+        const lowerContent = msg.content.toLowerCase();
+
+        if (lowerContent.startsWith("thread data for")) {
+            console.log(`${logPrefix} Found previous processing summary. Aborting.`);
+            return { success: false, reason: "already_processed" };
+        }
+
+        if (lowerContent.startsWith("flag:") && msg.author.id !== client.user.id) {
+            console.log(`${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`);
+            return { success: false, reason: "manual_flag_found" };
+        }
+
+        if (lowerContent.includes("bonk")) {
+            bonkFound = true;
+        }
+
+        if (lowerContent.startsWith("closing:") && !msg.author.bot) {
+            manualClosingMessage = msg;
+        }
     }
 
     let closingMessage = null;
