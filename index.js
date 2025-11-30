@@ -893,8 +893,10 @@ async function processTicketChannel(
             );
           }
         }
-        closerUser = member?.displayName ?? closingMessage.author.displayName;
-        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser}`);
+
+        const closerId = closingMessage.author.id;
+        closerUser = VERIFIER_ID_MAP[closerId] || (member?.displayName ?? closingMessage.author.displayName);
+        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`);
 
         const lines = closingMessage.content.split("\n");
         const firstLineRaw = lines.shift() || "";
@@ -1334,8 +1336,10 @@ async function processThread(
             );
           }
         }
-        closerUser = member?.displayName ?? closingMessage.author.displayName;
-        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser}`);
+
+        const closerId = closingMessage.author.id;
+        closerUser = VERIFIER_ID_MAP[closerId] || (member?.displayName ?? closingMessage.author.displayName);
+        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`);
 
         const messageContentLines = closingMessage.content.split("\n");
         const firstLineRaw = messageContentLines.shift() || "";
