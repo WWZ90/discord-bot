@@ -26,6 +26,66 @@ const TICKET_TOOL_USER_ID = process.env.TICKET_TOOL_USER_ID;
 const OO_LIVE_FEED_CHANNEL_ID = process.env.OO_LIVE_FEED_CHANNEL_ID;
 const FAILED_TICKETS_FORUM_ID = process.env.FAILED_TICKETS_FORUM_ID;
 
+const VERIFIER_ID_MAP = {
+  // --- Bots ---
+  "1168799488819859506": "Thatcryptogal",
+  "1165867875450507265": "Decap",
+  "1306255447921266708": "Moon",
+  "1168003949173936229": "Manuel",
+  "1166775345786126458": "Kurapika",
+  "1166811542927454238": "Bonded",
+  "1251472380732244111": "Mperry",
+  "1167997659483742278": "Shara",
+  "1440048299888480329": "Henry",
+  "1166811112105324635": "Obito",
+  "1170573707220099192": "aenews",
+  "1293989820456108163": "Kiara",
+  "1166914386691096626": "Elliot",
+
+  // --- Verifiers ---
+  "1192038652428156930": "Williamson",
+  "1087299154629365780": "Henry",
+  "740634549070856243": "Kurapika",
+  "897927615992701010": "Manuel",
+  "968109441398485022": "Mperry",
+  "948633228741320764": "Obito",
+  "693794367395332196": "RuneManny",
+  "1089240716988919990": "Cha",
+  "920460678580547665": "Anglo",
+  "927149128440508457": "SolaX",
+  "1125576177101312000": "Kiara",
+  "631768876597641228": "Brooks",
+  "1348003493713023117": "crzu",
+  "424567831657709594": "Lonfus",
+  "975111115858124850": "Ace",
+  "1209765189885501523": "Hayy",
+  "560891548963700749": "Say10",
+  "757559795401097276": "ZenMaster",
+  "838764590094745631": "Thatcryptogal",
+  "1089111748046495764": "Bonded",
+  "620160105748496404": "Nemo",
+  "634236418310275072": "Jessica",
+  "964250522230087711": "Moon",
+  "991526929930911744": "Brickz",
+  "1057540551815213106": "Rikkybetty",
+  "533270381218496523": "Fhantom",
+  "182372734783717377": "Decap",
+  "1075289665264955472": "Dynosawr",
+  "959529778061398068": "Havillah",
+  "1210165991225692214": "Ty",
+  "441681034388701205": "JC",
+  "194561713033445376": "Flame",
+  "1342077143135289354": "Wacko",
+  "218899496598372366": "Verrissimus",
+  "489167811357311017": "aajjss",
+  "252215153305583616": "aenews",
+  "187029075485917184": "Pingu",
+  "845581203628490762": "tenadome",
+  "996906539199758389": "Elliot",
+};
+
+const KNOWN_VERIFIER_BOT_IDS = Object.keys(VERIFIER_ID_MAP);
+
 let lastTicketToolActivityTimestamp = Date.now();
 const FALLBACK_QUEUE_PROCESS_INTERVAL_MS = 60 * 1000;
 const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000;
@@ -636,7 +696,12 @@ async function processTicketChannel(
   );
 
   try {
-    const allMessages = await channel.messages.fetch({ limit: 100 });
+    const allMessagesCollection = await channel.messages.fetch({ limit: 100 });
+    const allMessages = Array.from(allMessagesCollection.values()).reverse(); // Chronological order
+
+    let bonkFound = false;
+    let manualClosingMessage = null;
+
     if (initiatedBy === "Automatic Scan") {
       for (const msg of allMessages.values()) {
         const lowerContent = msg.content.toLowerCase();
@@ -648,6 +713,12 @@ async function processTicketChannel(
             `${logPrefix} Found "Flag:" or previous processing summary. Skipping auto-scan.`
           );
           return { success: false, reason: "flagged_or_processed" };
+        }
+        if (lowerContent.includes("bonk")) {
+          bonkFound = true;
+        }
+        if (lowerContent.startsWith("closing:") && !msg.author.bot) {
+          if (!manualClosingMessage) manualClosingMessage = msg;
         }
       }
     }
@@ -717,82 +788,156 @@ async function processTicketChannel(
         typeColumn = "Polymarket";
         console.log(`${logPrefix} Processing as Polymarket (manual).`);
       }
-    } else if (closingMessage) {
-      closingBlockFoundAndProcessed = true;
-      let member = closingMessage.member;
-      if (!member) {
-        try {
+    }  else {
+      closingMessage = manualClosingMessage;
+      let autoClosingGenerated = false;
+
+      if (!closingMessage) {
+        if (bonkFound) {
           console.log(
-            `${logPrefix} Member not cached for message author ${closingMessage.author.id}. Fetching...`
+            `${logPrefix} 'Bonk' found and no manual CLOSING message. Flagging for manual review.`
           );
-          member = await closingMessage.guild.members.fetch(
-            closingMessage.author.id
-          );
-        } catch (fetchError) {
-          console.error(
-            `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
-            fetchError
-          );
-          member = null;
+          let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
+          if (botConfig.errorNotificationUserID)
+            flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
+          await channel.send(flagMsg);
+          return { success: false, reason: "no_closing_message_bonk_found" };
         }
-      }
-      closerUser = member?.displayName ?? closingMessage.author.displayName;
-      console.log(`${logPrefix} 'CLOSING:' block by ${closerUser}`);
 
-      const lines = closingMessage.content.split("\n");
-      const firstLineRaw = lines.shift() || "";
-      const contentRaw = firstLineRaw.substring(8).trim();
-      const contentLower = contentRaw.toLowerCase();
+        console.log(
+          `${logPrefix} No manual CLOSING found and no blockers. Attempting auto-closing.`
+        );
 
-      if (blockTypes.includes(contentLower)) {
-        typeColumn =
-          contentLower.charAt(0).toUpperCase() + contentLower.slice(1);
-        if (contentLower === "disputed") {
-          disputedColumn = "y";
-        }
-      } else {
-        const users = contentRaw
-          ? contentRaw
-              .split(/[.,]/)
-              .map((n) => n.trim())
-              .filter(Boolean)
-          : [];
-        if (users.length > 3) {
-          validationErrorMessages.push(
-            `Error: "CLOSING:" line max 3 P/S/T users. Found: ${users.length}.`
+        const ticketToolMessageIndex = allMessages.findIndex(
+          (m) => m.author.id === TICKET_TOOL_USER_ID && m.embeds.length > 0
+        );
+
+        if (ticketToolMessageIndex === -1) {
+          console.log(
+            `${logPrefix} Auto-closing failed: Cannot find Ticket Tool message. Flagging.`
           );
+          let flagMsg = `Flag: Auto-closing failed. Cannot find Ticket Tool message. Manual review needed.`;
+          if (botConfig.errorNotificationUserID)
+            flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
+          await channel.send(flagMsg);
+          return { success: false, reason: "auto_close_no_tt_message" };
         }
-        primaryUser = users[0] || "";
-        secondaryUser = users[1] || "";
-        terciaryUser = users[2] || "";
+
+        const messagesAfterTicketTool = allMessages.slice(
+          ticketToolMessageIndex + 1
+        );
+        const foundVerifiers = [];
+        const foundVerifierIds = new Set();
+        for (const msg of messagesAfterTicketTool) {
+          if (!msg.content.toLowerCase().startsWith("verification")) continue;
+          if (msg.author.bot && !KNOWN_VERIFIER_BOT_IDS.includes(msg.author.id))
+            continue;
+
+          const verifierName = VERIFIER_ID_MAP[msg.author.id];
+          if (verifierName && !foundVerifierIds.has(msg.author.id)) {
+            foundVerifiers.push(verifierName);
+            foundVerifierIds.add(msg.author.id);
+          }
+          if (foundVerifiers.length >= 3) break;
+        }
+
+        console.log(
+          `${logPrefix} Auto-closing found ${
+            foundVerifiers.length
+          } verifiers: ${foundVerifiers.join(", ")}`
+        );
+
+        let closingContent = "";
+        const isDisputed = allMessages.some((m) =>
+          m.content.toLowerCase().includes("disputed")
+        );
+
+        if (isDisputed && foundVerifiers.length === 0) {
+          closingContent = "Disputed";
+        } else {
+          closingContent = foundVerifiers.join(", ");
+        }
+
+        closingMessage = {
+          content: `CLOSING: ${closingContent}`,
+          author: {
+            id: client.user.id,
+            displayName: client.user.username,
+            tag: client.user.tag,
+          },
+          guild: channel.guild,
+          member:
+            channel.guild.members.cache.get(client.user.id) ||
+            (await channel.guild.members
+              .fetch(client.user.id)
+              .catch(() => null)),
+        };
+        autoClosingGenerated = true;
       }
 
-      const closingData = parseClosingBlock(lines);
-      bonkedUsersData.primary = closingData.bonkedUsersData.primary;
-      bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
-      bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
-      bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
+      if (closingMessage) {
+        closingBlockFoundAndProcessed = true;
+        let member = closingMessage.member;
+        if (!member && !autoClosingGenerated) {
+          try {
+            member = await closingMessage.guild.members.fetch(
+              closingMessage.author.id
+            );
+          } catch (fetchError) {
+            console.error(
+              `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
+              fetchError
+            );
+          }
+        }
+        closerUser = member?.displayName ?? closingMessage.author.displayName;
+        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser}`);
 
-      bonkersInMessageText.push(...closingData.bonkersList);
+        const lines = closingMessage.content.split("\n");
+        const firstLineRaw = lines.shift() || "";
+        const contentRaw = firstLineRaw.substring(8).trim();
+        const contentLower = contentRaw.toLowerCase();
 
-      if (closingData.manualLink) {
-        ooLink = closingData.manualLink;
-        console.log(
-          `${logPrefix} OO Link overridden from CLOSING message: ${ooLink}`
-        );
-      }
-      if (closingData.manualType) {
-        typeColumn = closingData.manualType;
-        console.log(
-          `${logPrefix} Type overridden from CLOSING message: ${typeColumn}`
-        );
-      }
-      if (closingData.alertoorUser) {
-        //disputedColumn = `y (Alertoor: ${closingData.alertoorUser})`;
-        disputeAlertoor = closingData.alertoorUser;
-        console.log(
-          `${logPrefix} Dispute alertoor column set by Alertoor: ${closingData.alertoorUser}`
-        );
+        if (blockTypes.includes(contentLower)) {
+          typeColumn = capitalizeFirstLetter(contentLower);
+          if (contentLower === "disputed") {
+            disputedColumn = "y";
+          }
+        } else {
+          const users = contentRaw
+            ? contentRaw
+                .split(/[.,]/)
+                .map((n) => n.trim())
+                .filter(Boolean)
+            : [];
+          if (users.length > 3 && !autoClosingGenerated) {
+            validationErrorMessages.push(
+              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${users.length}.`
+            );
+          }
+          primaryUser = users[0] || "";
+          secondaryUser = users[1] || "";
+          terciaryUser = users[2] || "";
+        }
+
+        if (!autoClosingGenerated) {
+          const closingData = parseClosingBlock(lines);
+          bonkedUsersData.primary = closingData.bonkedUsersData.primary;
+          bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
+          bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+          bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
+          bonkersInMessageText.push(...closingData.bonkersList);
+
+          if (closingData.manualLink) {
+            ooLink = closingData.manualLink;
+          }
+          if (closingData.manualType) {
+            typeColumn = closingData.manualType;
+          }
+          if (closingData.alertoorUser) {
+            disputeAlertoor = closingData.alertoorUser;
+          }
+        }
       }
     }
 
@@ -820,6 +965,7 @@ async function processTicketChannel(
       await channel.send(errReply);
       return { success: false, reason: "validation_error_in_closing_block" };
     }
+    /*
     if (
       recordType === "standard" &&
       !closingBlockFoundAndProcessed &&
@@ -833,7 +979,7 @@ async function processTicketChannel(
         flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
       await channel.send(flagMsg);
       return { success: false, reason: "no_closing_message_and_flagged" };
-    }
+    }*/
 
     const rowData = {
       [ORDER_COLUMN_HEADER]: orderColumnValue,
@@ -975,7 +1121,7 @@ async function processThread(
     primaryUser = "",
     secondaryUser = "",
     terciaryUser = "",
-    typeColumn = capitalizeFirstLetter(blockTypes[0]), //By default Polymarket
+    typeColumn = capitalizeFirstLetter(blockTypes[0]),
     closerUser = "",
     disputedColumn = "";
   const proposalNameForSheet = threadChannel.name;
@@ -1009,58 +1155,6 @@ async function processThread(
         console.error(`${logPrefix} Could not fetch starter message:`, err);
         return null;
       });
-
-    /*
-      const referenceLinkMatch = starterMessage.content.match(
-      /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/
-    );
-    if (!referenceLinkMatch) {
-      console.log(
-        `${logPrefix} No Discord message link found in starter message.`
-      );
-    } else {
-      const [, linkedChannelId, linkedMessageId] = referenceLinkMatch;
-      try {
-        const linkedChannel = await client.channels.fetch(linkedChannelId);
-        if (!linkedChannel || !linkedChannel.isTextBased()) {
-          await threadChannel.send(
-            `Flag: Linked channel ID ${linkedChannelId} not valid. <@${
-              botConfig.errorNotificationUserID || ""
-            }>`
-          );
-          return { success: false, reason: "linked_channel_not_text" };
-        }
-        const feedMessage = await linkedChannel.messages.fetch(linkedMessageId);
-
-        let foundLink = null;
-        if (feedMessage.embeds && feedMessage.embeds.length > 0) {
-          for (const embed of feedMessage.embeds) {
-            foundLink =
-              findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
-            if (foundLink) break;
-            if (embed.fields && embed.fields.length > 0) {
-              for (const field of embed.fields) {
-                foundLink = findValidLinkIn(field.value);
-                if (foundLink) break;
-              }
-            }
-            if (foundLink) break;
-          }
-        }
-        if (!foundLink) {
-          foundLink = findValidLinkIn(feedMessage.content);
-        }
-        if (foundLink) {
-          ooLink = foundLink;
-        }
-      } catch (err) {
-        console.error(
-          `${logPrefix} Error fetching/processing linked message for OO Link:`,
-          err
-        );
-      }
-    }
-    */
 
     ooLink = findValidLinkIn(starterMessage.content);
     if (!ooLink && starterMessage.embeds.length > 0) {
@@ -1111,147 +1205,191 @@ async function processThread(
       }
     }
 
-    const threadMessages = await threadChannel.messages.fetch({ limit: 100 });
-    let closingMessage = null;
-    for (const msg of threadMessages.values()) {
-      if (msg.content.toLowerCase().startsWith("closing:")) {
-        closingMessage = msg;
-        break;
+    const threadMessagesCollection = await threadChannel.messages.fetch({
+      limit: 100,
+    });
+    const allMessages = Array.from(threadMessagesCollection.values()).reverse(); // Chronological
+
+    let bonkFound = false;
+    let manualClosingMessage = null;
+
+    for (const msg of allMessages) {
+      const lowerContent = msg.content.toLowerCase();
+      if (
+        lowerContent.startsWith("flag:") ||
+        lowerContent.startsWith("thread data for")
+      ) {
+        console.log(
+          `${logPrefix} Found "Flag:" or previous processing summary. Aborting.`
+        );
+        return { success: false, reason: "flagged_or_processed" };
+      }
+      if (lowerContent.includes("bonk")) {
+        bonkFound = true;
+      }
+      if (lowerContent.startsWith("closing:") && !msg.author.bot) {
+        if (!manualClosingMessage) manualClosingMessage = msg;
       }
     }
 
-    let closingBlockFoundAndProcessed = false;
+    let closingMessage = null;
+
     if (blockTypes.includes(recordType)) {
       primaryUser = "";
       secondaryUser = "";
       terciaryUser = "";
       closerUser = recorderUser;
-      bonkersInMessageText.length = 0;
-      bonkedUsersData.primary.clear();
-      bonkedUsersData.secondary.clear();
-      bonkedUsersData.tertiary.clear();
-      bonkedUsersData.btertiary.clear();
-      disputedColumn = "";
-      closingBlockFoundAndProcessed = true;
 
-      if (recordType === "assertion") {
-        typeColumn = "Assertion";
-        console.log(`${logPrefix} Processing as Assertion (manual).`);
-      } else if (recordType === "disputed") {
+      if (recordType === "assertion") typeColumn = "Assertion";
+      else if (recordType === "disputed") {
         typeColumn = "Disputed";
         disputedColumn = "y";
-        console.log(`${logPrefix} Processing as Disputed (manual).`);
-      } else if (recordType === "snapshot") {
-        typeColumn = "Snapshot";
-        console.log(`${logPrefix} Processing as Snapshot (manual).`);
-      } else if (recordType === "polymarket") {
-        typeColumn = "Polymarket";
-        console.log(`${logPrefix} Processing as Polymarket (manual).`);
-      }
-    } else if (closingMessage) {
-      closingBlockFoundAndProcessed = true;
-      let member = closingMessage.member;
-      if (!member) {
-        try {
+      } else if (recordType === "snapshot") typeColumn = "Snapshot";
+      else if (recordType === "polymarket") typeColumn = "Polymarket";
+      console.log(`${logPrefix} Processing as ${typeColumn} (manual command).`);
+    } else {
+      closingMessage = manualClosingMessage;
+      let autoClosingGenerated = false;
+
+      if (!closingMessage) {
+        if (bonkFound) {
           console.log(
-            `${logPrefix} Member not cached for message author ${closingMessage.author.id}. Fetching...`
+            `${logPrefix} 'Bonk' found and no manual CLOSING. Flagging.`
           );
-          member = await closingMessage.guild.members.fetch(
-            closingMessage.author.id
-          );
-        } catch (fetchError) {
-          console.error(
-            `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
-            fetchError
-          );
-          member = null;
-        }
-      }
-      closerUser = member?.displayName ?? closingMessage.author.displayName;
-      console.log(`${logPrefix} 'CLOSING:' block found by ${closerUser}`);
-
-      const messageContentLines = closingMessage.content.split("\n");
-      const firstLineLower = messageContentLines.shift()?.toLowerCase() || "";
-      const closingLineContentRaw = firstLineLower.startsWith("closing:")
-        ? firstLineLower.substring(8).trim()
-        : "";
-
-      if (blockTypes.includes(closingLineContentRaw)) {
-        typeColumn =
-          closingLineContentRaw.charAt(0).toUpperCase() +
-          closingLineContentRaw.slice(1);
-        if (closingLineContentRaw === "disputed") {
-          disputedColumn = "y";
-        }
-        primaryUser = "";
-        secondaryUser = "";
-        terciaryUser = "";
-      } else {
-        const usersRaw = closingLineContentRaw
-          ? closingLineContentRaw
-              .split(/[.,]/)
-              .map((n) => n.trim())
-              .filter(Boolean)
-          : [];
-        if (usersRaw.length > 3) {
-          validationErrorMessages.push(
-            `Error: "CLOSING:" line max 3 P/S/T users. Found: ${usersRaw.length}.`
-          );
+          let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
+          if (botConfig.errorNotificationUserID)
+            flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
+          await threadChannel.send(flagMsg);
+          return { success: false, reason: "no_closing_message_bonk_found" };
         }
 
-        const pstUsers = [];
-        usersRaw.forEach((userStr) => {
-          const findoorMatch = userStr.match(/^(.*?)\s*\(\s*findoor\s*\)$/i);
-          if (findoorMatch) {
-            const userName = capitalizeFirstLetter(findoorMatch[1].trim());
-            pstUsers.push(userName);
-            findoorUsers.add(userName);
-          } else {
-            pstUsers.push(capitalizeFirstLetter(userStr));
+        console.log(`${logPrefix} No manual CLOSING. Attempting auto-closing.`);
+
+        const foundVerifiers = [];
+        const foundVerifierIds = new Set();
+        for (const msg of allMessages) {
+          if (!msg.content.toLowerCase().startsWith("verification")) continue;
+          if (msg.author.bot && !KNOWN_VERIFIER_BOT_IDS.includes(msg.author.id))
+            continue;
+
+          const verifierName = VERIFIER_ID_MAP[msg.author.id];
+          if (verifierName && !foundVerifierIds.has(msg.author.id)) {
+            foundVerifiers.push(verifierName);
+            foundVerifierIds.add(msg.author.id);
           }
-        });
-        primaryUser = pstUsers[0] || "";
-        secondaryUser = pstUsers[1] || "";
-        terciaryUser = pstUsers[2] || "";
+          if (foundVerifiers.length >= 3) break;
+        }
+
+        console.log(
+          `${logPrefix} Auto-closing found ${
+            foundVerifiers.length
+          } verifiers: ${foundVerifiers.join(", ")}`
+        );
+
+        let closingContent = "";
+        const isDisputed = allMessages.some((m) =>
+          m.content.toLowerCase().includes("disputed")
+        );
+
+        if (isDisputed && foundVerifiers.length === 0) {
+          closingContent = "Disputed";
+        } else {
+          closingContent = foundVerifiers.join(", ");
+        }
+
+        closingMessage = {
+          content: `CLOSING: ${closingContent}`,
+          author: {
+            id: client.user.id,
+            displayName: client.user.username,
+            tag: client.user.tag,
+          },
+          guild: threadChannel.guild,
+          member:
+            threadChannel.guild.members.cache.get(client.user.id) ||
+            (await threadChannel.guild.members
+              .fetch(client.user.id)
+              .catch(() => null)),
+        };
+        autoClosingGenerated = true;
       }
 
-      const closingData = parseClosingBlock(messageContentLines);
-      bonkedUsersData.primary = closingData.bonkedUsersData.primary;
-      bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
-      bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
-      bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
+      if (closingMessage) {
+        let member = closingMessage.member;
+        if (!member && !autoClosingGenerated) {
+          try {
+            member = await closingMessage.guild.members.fetch(
+              closingMessage.author.id
+            );
+          } catch (fetchError) {
+            console.error(
+              `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
+              fetchError
+            );
+          }
+        }
+        closerUser = member?.displayName ?? closingMessage.author.displayName;
+        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser}`);
 
-      bonkersInMessageText.push(...closingData.bonkersList);
+        const messageContentLines = closingMessage.content.split("\n");
+        const firstLineRaw = messageContentLines.shift() || "";
+        const closingLineContentRaw = firstLineRaw.startsWith("CLOSING:")
+          ? firstLineRaw.substring(8).trim()
+          : "";
+        const closingLineContentLower = closingLineContentRaw.toLowerCase();
 
-      if (closingData.manualLink) {
-        ooLink = closingData.manualLink;
-        console.log(
-          `${logPrefix} OO Link overridden from CLOSING message: ${ooLink}`
-        );
-      }
-      if (closingData.manualType) {
-        typeColumn = closingData.manualType;
-        console.log(
-          `${logPrefix} Type overridden from CLOSING message: ${typeColumn}`
-        );
-      }
-      if (closingData.alertoorUser) {
-        disputedColumn = `y (Alertoor: ${closingData.alertoorUser})`;
-        console.log(
-          `${logPrefix} Disputed column set by Alertoor: ${closingData.alertoorUser}`
-        );
-      }
-      if (closingData.manualFindoor) {
-        findoorUsers.add(closingData.manualFindoor);
-        console.log(
-          `${logPrefix} Findoor added from CLOSING message: ${closingData.manualFindoor}`
-        );
+        if (blockTypes.includes(closingLineContentLower)) {
+          typeColumn = capitalizeFirstLetter(closingLineContentLower);
+          if (closingLineContentLower === "disputed") disputedColumn = "y";
+        } else {
+          const usersRaw = closingLineContentRaw
+            ? closingLineContentRaw
+                .split(/[.,]/)
+                .map((n) => n.trim())
+                .filter(Boolean)
+            : [];
+          if (usersRaw.length > 3 && !autoClosingGenerated) {
+            validationErrorMessages.push(
+              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${usersRaw.length}.`
+            );
+          }
+
+          const pstUsers = [];
+          usersRaw.forEach((userStr) => {
+            const findoorMatch = userStr.match(/^(.*?)\s*\(\s*findoor\s*\)$/i);
+            if (findoorMatch) {
+              const userName = capitalizeFirstLetter(findoorMatch[1].trim());
+              pstUsers.push(userName);
+              findoorUsers.add(userName);
+            } else {
+              pstUsers.push(capitalizeFirstLetter(userStr));
+            }
+          });
+          primaryUser = pstUsers[0] || "";
+          secondaryUser = pstUsers[1] || "";
+          terciaryUser = pstUsers[2] || "";
+        }
+
+        if (!autoClosingGenerated) {
+          const closingData = parseClosingBlock(messageContentLines);
+          bonkedUsersData.primary = closingData.bonkedUsersData.primary;
+          bonkedUsersData.secondary = closingData.bonkedUsersData.secondary;
+          bonkedUsersData.tertiary = closingData.bonkedUsersData.tertiary;
+          bonkedUsersData.btertiary = closingData.bonkedUsersData.btertiary;
+          bonkersInMessageText.push(...closingData.bonkersList);
+          if (closingData.manualLink) ooLink = closingData.manualLink;
+          if (closingData.manualType) typeColumn = closingData.manualType;
+          if (closingData.alertoorUser)
+            disputedColumn = `y (Alertoor: ${closingData.alertoorUser})`;
+          if (closingData.manualFindoor)
+            findoorUsers.add(closingData.manualFindoor);
+        }
       }
     }
 
     if (ooLink === "") {
       console.log(`${logPrefix} OO Link NOT FOUND. Flagging.`);
-      let flagMessage = `Flag: OO Link not found after checking referenced message. Manual review needed.`;
+      let flagMessage = `Flag: OO Link not found. Manual review needed.`;
       if (botConfig.errorNotificationUserID)
         flagMessage += ` <@${botConfig.errorNotificationUserID}>`;
       await threadChannel.send(flagMessage);
@@ -1270,15 +1408,6 @@ async function processThread(
       errReply += "\n\nPlease correct and re-run `!recordt`.";
       await threadChannel.send(errReply);
       return { success: false, reason: "validation_error_in_closing_block" };
-    }
-
-    if (recordType === "standard" && !closingBlockFoundAndProcessed) {
-      console.log(`${logPrefix} "CLOSING:" message not found. Flagging.`);
-      let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
-      if (botConfig.errorNotificationUserID)
-        flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
-      await threadChannel.send(flagMsg);
-      return { success: false, reason: "no_closing_message_and_flagged" };
     }
 
     const rowData = {
@@ -1758,45 +1887,45 @@ async function processFallbackQueue() {
     for (const channelId of recheckedIds) {
       let foundAndCleared = false;
       try {
-          const channel = await client.channels.fetch(channelId);
-          const messages = await channel.messages.fetch({ limit: 100 });
-          
-          for (const msg of messages.values()) {
-              if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
-                  const embedContent = msg.embeds[0].description || "";
-                  const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
-                  const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
+        const channel = await client.channels.fetch(channelId);
+        const messages = await channel.messages.fetch({ limit: 100 });
 
-                  if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
-                      const uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
-                      const indexToRemove = fallbackQueue.findIndex(
-                          (item) => item.uniqueId === uniqueId
-                      );
-                      if (indexToRemove > -1) {
-                          const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-                          console.log(
-                              `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
-                          );
-                          foundAndCleared = true;
-                          break;
-                      }
-                  }
-              }
-          }
+        for (const msg of messages.values()) {
+          if (msg.author.id === TICKET_TOOL_USER_ID && msg.embeds.length > 0) {
+            const embedContent = msg.embeds[0].description || "";
+            const txHashMatch = embedContent.match(/transactionHash=([^&]+)/);
+            const eventIndexMatch = embedContent.match(/eventIndex=(\d+)/);
 
-          if (!foundAndCleared) {
-              console.log(
-                  `[Supervisor] DOUBLE CHECK NOTE: No matching pending item was found in the queue for channel with ID ${channelId}.`
+            if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+              const uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+              const indexToRemove = fallbackQueue.findIndex(
+                (item) => item.uniqueId === uniqueId
               );
+              if (indexToRemove > -1) {
+                const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+                console.log(
+                  `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
+                );
+                foundAndCleared = true;
+                break;
+              }
+            }
           }
-      } catch (error) {
-          console.error(
-              `[Supervisor] Error during double check for channel ID ${channelId}:`,
-              error
+        }
+
+        if (!foundAndCleared) {
+          console.log(
+            `[Supervisor] DOUBLE CHECK NOTE: No matching pending item was found in the queue for channel with ID ${channelId}.`
           );
+        }
+      } catch (error) {
+        console.error(
+          `[Supervisor] Error during double check for channel ID ${channelId}:`,
+          error
+        );
       } finally {
-          channelsToRecheck.delete(channelId);
-      }  
+        channelsToRecheck.delete(channelId);
+      }
     }
   }
 
