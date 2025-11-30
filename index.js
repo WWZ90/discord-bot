@@ -707,9 +707,21 @@ async function processTicketChannel(
         const lowerContent = msg.content.toLowerCase();
 
         if (lowerContent.startsWith("ticket data for order")) {
+            // Si el mensaje de "procesado" es del bot Y la acción configurada es "delete"
+            if (msg.author.id === client.user.id && botConfig.currentPostProcessingAction === 'delete' && TICKET_TOOL_DELETE_COMMAND_TEXT) {
+                console.log(`${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`);
+                try {
+                    await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
+                } catch (e) {
+                    console.error(`${logPrefix} Failed to re-send delete command:`, e);
+                }
+                return { success: false, reason: "resent_delete_command" };
+            }
+            
             console.log(`${logPrefix} Found previous processing summary. Aborting.`);
             return { success: false, reason: "already_processed" };
         }
+
 
         if (lowerContent.startsWith("flag:") && msg.author.id !== client.user.id) {
             console.log(`${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`);
