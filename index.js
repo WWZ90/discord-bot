@@ -95,6 +95,9 @@ const fallbackQueue = [];
 const channelsToRecheck = new Set();
 let isProcessingFallbackQueue = false;
 
+const createdFallbackThreads = new Map();
+const FALLBACK_RECORD_EXPIRATION_MS = 4 * 60 * 60 * 1000; // 4 hours
+
 const pendingTicketTimers = new Map();
 
 const WORKSHEET_TITLE_MAIN = process.env.WORKSHEET_TITLE_MAIN || "Sheet1";
@@ -1870,11 +1873,27 @@ client.on("channelCreate", async (channel) => {
             console.log(
               `${logPrefix} SUCCESS: Removed "${removedItem.title}" (ID: ${uniqueId}) from fallback queue.`
             );
-          } else {
-            console.log(
-              `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it was not in the pending queue (already processed or cleared).`
-            );
+            return;
           }
+          
+          if (createdFallbackThreads.has(uniqueId)) {
+            console.log(
+              `${logPrefix} DUPLICATE DETECTED: A fallback thread already exists for ID ${uniqueId}. Closing this ticket.`
+            );
+            
+            try {
+                await channel.send("CLOSING: Duplicate");  
+            } catch (e) {
+                console.error(`${logPrefix} Error closing duplicate ticket:`, e);
+            }
+
+            createdFallbackThreads.delete(uniqueId);
+            return; 
+          }
+
+          console.log(
+            `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it was not in the pending queue or fallback thread list.`
+          );
         } else {
           console.log(
             `${logPrefix} WARNING: Could not extract full ID from the Ticket Tool message.`
@@ -1893,6 +1912,20 @@ client.on("channelCreate", async (channel) => {
 });
 
 async function processFallbackQueue() {
+  if (createdFallbackThreads.size > 0) {
+    const now = Date.now();
+    let cleanedCount = 0;
+    for (const [uniqueId, timestamp] of createdFallbackThreads.entries()) {
+      if (now - timestamp > FALLBACK_RECORD_EXPIRATION_MS) {
+        createdFallbackThreads.delete(uniqueId);
+        cleanedCount++;
+      }
+    }
+    if (cleanedCount > 0) {
+      console.log(`[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`);
+    }
+  }
+
   if (
     isProcessingFallbackQueue ||
     (fallbackQueue.length === 0 && channelsToRecheck.size === 0)
@@ -2003,6 +2036,9 @@ async function processFallbackQueue() {
         console.log(
           `[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`
         );
+
+        createdFallbackThreads.set(item.uniqueId, Date.now());
+        console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
       } catch (error) {
         console.error(
           `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
