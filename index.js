@@ -1296,7 +1296,7 @@ async function processThread(
         bonkFound = true;
       }
 
-      if (lowerContent.startsWith("closing:")) {
+      if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
         manualClosingMessage = msg;
       }
     }
