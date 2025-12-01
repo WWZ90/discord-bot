@@ -705,96 +705,75 @@ async function processTicketChannel(
     let manualClosingMessage = null;
     let botFlagFound = false;
 
-    if (initiatedBy === "Automatic Scan") {
-      for (const msg of allMessagesCollection.values()) {
-        const lowerContent = msg.content.toLowerCase();
+    for (const msg of allMessagesCollection.values()) {
+      const lowerContent = msg.content.toLowerCase();
 
-        if (lowerContent.startsWith("ticket data for order")) {
-          // Si el mensaje de "procesado" es del bot Y la acción configurada es "delete"
-          if (
-            msg.author.id === client.user.id &&
-            botConfig.currentPostProcessingAction === "delete" &&
-            TICKET_TOOL_DELETE_COMMAND_TEXT
-          ) {
-            console.log(
-              `${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`
-            );
-            try {
-              await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
-            } catch (e) {
-              console.error(
-                `${logPrefix} Failed to re-send delete command:`,
-                e
-              );
-            }
-            return { success: false, reason: "resent_delete_command" };
-          }
-
-          console.log(
-            `${logPrefix} Found previous processing summary. Aborting.`
-          );
-          return { success: false, reason: "already_processed" };
-        }
-
+      if (lowerContent.startsWith("ticket data for order")) {
         if (
-          lowerContent.startsWith("flag:") &&
-          msg.author.id !== client.user.id
+          msg.author.id === client.user.id &&
+          botConfig.currentPostProcessingAction === "delete" &&
+          TICKET_TOOL_DELETE_COMMAND_TEXT
         ) {
           console.log(
-            `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
+            `${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`
           );
-          return { success: false, reason: "manual_flag_found" };
-        } else if (
-          lowerContent.startsWith("flag:") &&
-          msg.author.id === client.user.id
-        ) {
-          botFlagFound = true;
+          try {
+            await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
+          } catch (e) {
+            console.error(`${logPrefix} Failed to re-send delete command:`, e);
+          }
+          return { success: false, reason: "resent_delete_command" };
         }
-
-        if (lowerContent.includes("bonk")) {
-          bonkFound = true;
-        }
-
-        if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
-          manualClosingMessage = msg;
-        }
+        console.log(
+          `${logPrefix} Found previous processing summary. Aborting.`
+        );
+        return { success: false, reason: "already_processed" };
       }
-    }
 
-    ooLink = "";
-    for (const msg of allMessagesCollection.values()) {
-      let foundLink = null;
-      if (msg.embeds && msg.embeds.length > 0) {
-        for (const embed of msg.embeds) {
-          foundLink = findValidLinkIn(embed.url);
-          if (foundLink) break;
-          foundLink = findValidLinkIn(embed.description);
-          if (foundLink) break;
-          if (embed.fields && embed.fields.length > 0) {
-            for (const field of embed.fields) {
-              foundLink = findValidLinkIn(field.value);
-              if (foundLink) break;
+      if (
+        lowerContent.startsWith("flag:") &&
+        msg.author.id !== client.user.id
+      ) {
+        console.log(
+          `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
+        );
+        return { success: false, reason: "manual_flag_found" };
+      }
+
+      if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
+        manualClosingMessage = msg;
+      }
+
+      if (
+        lowerContent.startsWith("flag:") &&
+        msg.author.id === client.user.id
+      ) {
+        botFlagFound = true;
+      }
+
+      if (lowerContent.includes("bonk")) {
+        bonkFound = true;
+      }
+
+      if (!ooLink) {
+        let foundLink = findValidLinkIn(msg.content);
+        if (msg.embeds && msg.embeds.length > 0) {
+          for (const embed of msg.embeds) {
+            foundLink =
+              foundLink ||
+              findValidLinkIn(embed.url) ||
+              findValidLinkIn(embed.description);
+            if (embed.fields && embed.fields.length > 0) {
+              for (const field of embed.fields) {
+                foundLink = foundLink || findValidLinkIn(field.value);
+              }
             }
           }
-          if (foundLink) break;
         }
-      }
-      if (!foundLink) {
-        foundLink = findValidLinkIn(msg.content);
-      }
-      if (foundLink) {
-        ooLink = foundLink;
-        console.log(`${logPrefix} Link FOUND: ${ooLink}`);
-        break;
-      }
-    }
-
-    let closingBlockFoundAndProcessed = false;
-    let closingMessage = null;
-    for (const msg of allMessagesCollection.values()) {
-      if (msg.content.toLowerCase().startsWith("closing:")) {
-        closingMessage = msg;
-        break;
+        if (foundLink) {
+          ooLink = foundLink;
+          console.log(`${logPrefix} Link FOUND: ${ooLink}`);
+        }
       }
     }
 
