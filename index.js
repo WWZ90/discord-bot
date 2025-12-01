@@ -755,7 +755,7 @@ async function processTicketChannel(
           bonkFound = true;
         }
 
-        if (lowerContent.startsWith("closing:")) {
+        if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
           manualClosingMessage = msg;
         }
       }
@@ -852,7 +852,9 @@ async function processTicketChannel(
           `${logPrefix} No manual CLOSING found and no blockers. Attempting auto-closing.`
         );
 
-        const allMessages = Array.from(allMessagesCollection.values()).reverse(); // Chronological order
+        const allMessages = Array.from(
+          allMessagesCollection.values()
+        ).reverse(); // Chronological order
 
         const ticketToolMessageIndex = allMessages.findIndex(
           (m) => m.author.id === TICKET_TOOL_USER_ID && m.embeds.length > 0
@@ -1338,7 +1340,9 @@ async function processThread(
 
         console.log(`${logPrefix} No manual CLOSING. Attempting auto-closing.`);
 
-        const allMessages = Array.from(threadMessagesCollection.values()).reverse(); // Chronological
+        const allMessages = Array.from(
+          threadMessagesCollection.values()
+        ).reverse(); // Chronological
 
         const foundVerifiers = [];
         const foundVerifierIds = new Set();
