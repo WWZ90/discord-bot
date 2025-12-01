@@ -53,7 +53,7 @@ const VERIFIER_ID_MAP = {
   "1089240716988919990": "Cha",
   "920460678580547665": "Anglo",
   "927149128440508457": "SolaX",
-  "1125576177101312000": "Kiara",
+  1125576177101312000: "Kiara",
   "631768876597641228": "Brooks",
   "1348003493713023117": "crzu",
   "424567831657709594": "Lonfus",
@@ -700,49 +700,69 @@ async function processTicketChannel(
 
   try {
     const allMessagesCollection = await channel.messages.fetch({ limit: 100 });
-    const allMessages = Array.from(allMessagesCollection.values()).reverse(); // Chronological order
 
     let bonkFound = false;
     let manualClosingMessage = null;
+    let botFlagFound = false;
 
     if (initiatedBy === "Automatic Scan") {
-      for (const msg of allMessages) {
+      for (const msg of allMessagesCollection) {
         const lowerContent = msg.content.toLowerCase();
 
         if (lowerContent.startsWith("ticket data for order")) {
-            // Si el mensaje de "procesado" es del bot Y la acción configurada es "delete"
-            if (msg.author.id === client.user.id && botConfig.currentPostProcessingAction === 'delete' && TICKET_TOOL_DELETE_COMMAND_TEXT) {
-                console.log(`${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`);
-                try {
-                    await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
-                } catch (e) {
-                    console.error(`${logPrefix} Failed to re-send delete command:`, e);
-                }
-                return { success: false, reason: "resent_delete_command" };
+          // Si el mensaje de "procesado" es del bot Y la acción configurada es "delete"
+          if (
+            msg.author.id === client.user.id &&
+            botConfig.currentPostProcessingAction === "delete" &&
+            TICKET_TOOL_DELETE_COMMAND_TEXT
+          ) {
+            console.log(
+              `${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`
+            );
+            try {
+              await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
+            } catch (e) {
+              console.error(
+                `${logPrefix} Failed to re-send delete command:`,
+                e
+              );
             }
-            
-            console.log(`${logPrefix} Found previous processing summary. Aborting.`);
-            return { success: false, reason: "already_processed" };
+            return { success: false, reason: "resent_delete_command" };
+          }
+
+          console.log(
+            `${logPrefix} Found previous processing summary. Aborting.`
+          );
+          return { success: false, reason: "already_processed" };
         }
 
-
-        if (lowerContent.startsWith("flag:") && msg.author.id !== client.user.id) {
-            console.log(`${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`);
-            return { success: false, reason: "manual_flag_found" };
+        if (
+          lowerContent.startsWith("flag:") &&
+          msg.author.id !== client.user.id
+        ) {
+          console.log(
+            `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
+          );
+          return { success: false, reason: "manual_flag_found" };
+        } else if (
+          lowerContent.startsWith("flag:") &&
+          msg.author.id === client.user.id
+        ) {
+          botFlagFound = true;
         }
 
         if (lowerContent.includes("bonk")) {
-            bonkFound = true;
+          bonkFound = true;
         }
 
-        if (lowerContent.startsWith("closing:") && !msg.author.bot) {
-            manualClosingMessage = msg;
+        if (lowerContent.startsWith("closing:")) {
+          manualClosingMessage = msg;
         }
-    }
+      }
     }
 
     ooLink = "";
-    for (const msg of allMessages.values()) {
+    for (const msg of allMessagesCollection.values()) {
       let foundLink = null;
       if (msg.embeds && msg.embeds.length > 0) {
         for (const embed of msg.embeds) {
@@ -771,7 +791,7 @@ async function processTicketChannel(
 
     let closingBlockFoundAndProcessed = false;
     let closingMessage = null;
-    for (const msg of allMessages.values()) {
+    for (const msg of allMessagesCollection.values()) {
       if (msg.content.toLowerCase().startsWith("closing:")) {
         closingMessage = msg;
         break;
@@ -806,25 +826,33 @@ async function processTicketChannel(
         typeColumn = "Polymarket";
         console.log(`${logPrefix} Processing as Polymarket (manual).`);
       }
-    }  else {
+    } else {
       closingMessage = manualClosingMessage;
       let autoClosingGenerated = false;
 
       if (!closingMessage) {
         if (bonkFound) {
-          console.log(
-            `${logPrefix} 'Bonk' found and no manual CLOSING message. Flagging for manual review.`
-          );
-          let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
-          if (botConfig.errorNotificationUserID)
-            flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
-          await channel.send(flagMsg);
+          if (!botFlagFound) {
+            console.log(
+              `${logPrefix} 'Bonk' found and no manual CLOSING message. Flagging for manual review.`
+            );
+            let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
+            if (botConfig.errorNotificationUserID)
+              flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
+            await channel.send(flagMsg);
+          } else {
+            console.log(
+              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`
+            );
+          }
           return { success: false, reason: "no_closing_message_bonk_found" };
         }
 
         console.log(
           `${logPrefix} No manual CLOSING found and no blockers. Attempting auto-closing.`
         );
+
+        const allMessages = Array.from(allMessagesCollection.values()).reverse(); // Chronological order
 
         const ticketToolMessageIndex = allMessages.findIndex(
           (m) => m.author.id === TICKET_TOOL_USER_ID && m.embeds.length > 0
@@ -910,8 +938,12 @@ async function processTicketChannel(
         }
 
         const closerId = closingMessage.author.id;
-        closerUser = VERIFIER_ID_MAP[closerId] || (member?.displayName ?? closingMessage.author.displayName);
-        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`);
+        closerUser =
+          VERIFIER_ID_MAP[closerId] ||
+          (member?.displayName ?? closingMessage.author.displayName);
+        console.log(
+          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`
+        );
 
         const lines = closingMessage.content.split("\n");
         const firstLineRaw = lines.shift() || "";
@@ -1228,31 +1260,43 @@ async function processThread(
     const threadMessagesCollection = await threadChannel.messages.fetch({
       limit: 100,
     });
-    const allMessages = Array.from(threadMessagesCollection.values()).reverse(); // Chronological
 
     let bonkFound = false;
     let manualClosingMessage = null;
+    let botFlagFound = false;
 
-    for (const msg of allMessages) {
-        const lowerContent = msg.content.toLowerCase();
+    for (const msg of threadMessagesCollection) {
+      const lowerContent = msg.content.toLowerCase();
 
-        if (lowerContent.startsWith("thread data for")) {
-            console.log(`${logPrefix} Found previous processing summary. Aborting.`);
-            return { success: false, reason: "already_processed" };
-        }
+      if (lowerContent.startsWith("thread data for")) {
+        console.log(
+          `${logPrefix} Found previous processing summary. Aborting.`
+        );
+        return { success: false, reason: "already_processed" };
+      }
 
-        if (lowerContent.startsWith("flag:") && msg.author.id !== client.user.id) {
-            console.log(`${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`);
-            return { success: false, reason: "manual_flag_found" };
-        }
+      if (
+        lowerContent.startsWith("flag:") &&
+        msg.author.id !== client.user.id
+      ) {
+        console.log(
+          `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
+        );
+        return { success: false, reason: "manual_flag_found" };
+      } else if (
+        lowerContent.startsWith("flag:") &&
+        msg.author.id === client.user.id
+      ) {
+        botFlagFound = true;
+      }
 
-        if (lowerContent.includes("bonk")) {
-            bonkFound = true;
-        }
+      if (lowerContent.includes("bonk")) {
+        bonkFound = true;
+      }
 
-        if (lowerContent.startsWith("closing:") && !msg.author.bot) {
-            manualClosingMessage = msg;
-        }
+      if (lowerContent.startsWith("closing:")) {
+        manualClosingMessage = msg;
+      }
     }
 
     let closingMessage = null;
@@ -1276,17 +1320,25 @@ async function processThread(
 
       if (!closingMessage) {
         if (bonkFound) {
-          console.log(
-            `${logPrefix} 'Bonk' found and no manual CLOSING. Flagging.`
-          );
-          let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
-          if (botConfig.errorNotificationUserID)
-            flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
-          await threadChannel.send(flagMsg);
+          if (!botFlagFound) {
+            console.log(
+              `${logPrefix} 'Bonk' found and no manual CLOSING. Flagging.`
+            );
+            let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
+            if (botConfig.errorNotificationUserID)
+              flagMsg += ` <@${botConfig.errorNotificationUserID}>`;
+            await threadChannel.send(flagMsg);
+          } else {
+            console.log(
+              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`
+            );
+          }
           return { success: false, reason: "no_closing_message_bonk_found" };
         }
 
         console.log(`${logPrefix} No manual CLOSING. Attempting auto-closing.`);
+
+        const allMessages = Array.from(threadMessagesCollection.values()).reverse(); // Chronological
 
         const foundVerifiers = [];
         const foundVerifierIds = new Set();
@@ -1353,8 +1405,12 @@ async function processThread(
         }
 
         const closerId = closingMessage.author.id;
-        closerUser = VERIFIER_ID_MAP[closerId] || (member?.displayName ?? closingMessage.author.displayName);
-        console.log(`${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`);
+        closerUser =
+          VERIFIER_ID_MAP[closerId] ||
+          (member?.displayName ?? closingMessage.author.displayName);
+        console.log(
+          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`
+        );
 
         const messageContentLines = closingMessage.content.split("\n");
         const firstLineRaw = messageContentLines.shift() || "";
@@ -1875,20 +1931,20 @@ client.on("channelCreate", async (channel) => {
             );
             return;
           }
-          
+
           if (createdFallbackThreads.has(uniqueId)) {
             console.log(
               `${logPrefix} DUPLICATE DETECTED: A fallback thread already exists for ID ${uniqueId}. Closing this ticket.`
             );
-            
+
             try {
-                await channel.send("CLOSING: Duplicate");  
+              await channel.send("CLOSING: Duplicate");
             } catch (e) {
-                console.error(`${logPrefix} Error closing duplicate ticket:`, e);
+              console.error(`${logPrefix} Error closing duplicate ticket:`, e);
             }
 
             createdFallbackThreads.delete(uniqueId);
-            return; 
+            return;
           }
 
           console.log(
@@ -1922,7 +1978,9 @@ async function processFallbackQueue() {
       }
     }
     if (cleanedCount > 0) {
-      console.log(`[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`);
+      console.log(
+        `[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`
+      );
     }
   }
 
@@ -2038,7 +2096,9 @@ async function processFallbackQueue() {
         );
 
         createdFallbackThreads.set(item.uniqueId, Date.now());
-        console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
+        console.log(
+          `[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`
+        );
       } catch (error) {
         console.error(
           `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
