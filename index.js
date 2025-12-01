@@ -706,7 +706,7 @@ async function processTicketChannel(
     let botFlagFound = false;
 
     if (initiatedBy === "Automatic Scan") {
-      for (const msg of allMessagesCollection) {
+      for (const msg of allMessagesCollection.values()) {
         const lowerContent = msg.content.toLowerCase();
 
         if (lowerContent.startsWith("ticket data for order")) {
@@ -1265,7 +1265,7 @@ async function processThread(
     let manualClosingMessage = null;
     let botFlagFound = false;
 
-    for (const msg of threadMessagesCollection) {
+    for (const msg of threadMessagesCollection.values()) {
       const lowerContent = msg.content.toLowerCase();
 
       if (lowerContent.startsWith("thread data for")) {
