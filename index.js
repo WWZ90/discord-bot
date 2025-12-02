@@ -41,6 +41,7 @@ const VERIFIER_ID_MAP = {
   "1170573707220099192": "aenews",
   "1293989820456108163": "Kiara",
   "1166914386691096626": "Elliot",
+  "1440048398421201086": "Williamson",
 
   // --- Verifiers ---
   "1192038652428156930": "Williamson",
@@ -53,7 +54,7 @@ const VERIFIER_ID_MAP = {
   "1089240716988919990": "Cha",
   "920460678580547665": "Anglo",
   "927149128440508457": "SolaX",
-  1125576177101312000: "Kiara",
+  "1125576177101312000": "Kiara",
   "631768876597641228": "Brooks",
   "1348003493713023117": "crzu",
   "424567831657709594": "Lonfus",
@@ -1557,8 +1558,23 @@ async function processThread(
     let majErr = `Error: Major processing error for "${proposalNameForSheet}". Check logs.`;
     if (botConfig.errorNotificationUserID)
       majErr += ` <@${botConfig.errorNotificationUserID}>`;
-    await threadChannel.send(majErr);
+    
+    try {
+        await threadChannel.send(majErr);
+    } catch (sendError) {
+        console.error(`${logPrefix} CRITICAL: Could not even send error message to thread. Error: ${sendError.message}`);
+    }
+
     return { success: false, reason: "unknown_error" };
+  } finally {
+    if (threadChannel && threadChannel.archivable && !threadChannel.archived) {
+        try {
+            await threadChannel.setArchived(true);
+            console.log(`${logPrefix} Thread successfully archived after processing.`);
+        } catch (archiveError) {
+            console.error(`${logPrefix} Failed to archive thread after processing: ${archiveError.message}`);
+        }
+    }
   }
 }
 
@@ -1860,6 +1876,204 @@ client.on("messageCreate", async (message) => {
       message.member.displayName,
       recordType
     );
+  } else if (commandName === "processthreads") {
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("Admin permission required to run this command.");
+    // }
+    
+    const dateString = args[0];
+    const timeString = args[1]; // Nuevo parámetro para la hora
+
+    // --- LÓGICA MEJORADA PARA FECHA Y HORA ---
+    if (!dateString) {
+        return message.reply("Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`");
+    }
+
+    let startTimestamp;
+    try {
+        // Combinamos la fecha y la hora (si se proporciona) para crear una fecha ISO 8601 completa
+        // Se asume que la hora proporcionada es UTC para evitar confusiones de zona horaria.
+        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
+        const startDate = new Date(fullDateTimeString);
+        
+        if (isNaN(startDate.getTime())) {
+            throw new Error("Invalid date or time format.");
+        }
+        startTimestamp = startDate.getTime();
+        
+        const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
+        await message.reply(`Querying threads created on or after **${feedbackDate}**. Please wait...`);
+        console.log(`[Backlog] Set start timestamp to ${startTimestamp} (${startDate.toISOString()})`);
+
+    } catch (e) {
+        return message.reply("Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
+    }
+
+
+    try {
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+            return message.channel.send("Error: Could not find the configured text channel for threads.");
+        }
+        
+        // La lógica de escaneo de mensajes es la misma, ya que es la más fiable
+        let allThreads = [];
+        let lastMessageId = null;
+        let fetchMore = true;
+        let scannedMessages = 0;
+        console.log(`[Backlog] Starting deep scan for threads newer than ${new Date(startTimestamp).toISOString()}`);
+
+        while(fetchMore) {
+            const options = { limit: 100 };
+            if (lastMessageId) { options.before = lastMessageId; }
+            const messages = await parentChannel.messages.fetch(options);
+            scannedMessages += messages.size;
+
+            if (messages.size === 0) { fetchMore = false; break; }
+
+            for (const msg of messages.values()) {
+                if (msg.createdTimestamp < startTimestamp) {
+                    fetchMore = false;
+                    break;
+                }
+                if (msg.thread) { allThreads.push(msg.thread); }
+            }
+
+            if(fetchMore) { lastMessageId = messages.lastKey(); }
+        }
+        
+        console.log(`[Backlog] Deep scan complete. Found ${allThreads.length} potential threads after the specified time.`);
+
+        if (allThreads.length === 0) {
+            return message.channel.send("No threads found created on or after the specified date and time.");
+        }
+
+        allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        
+        await message.channel.send(`Scan complete. Starting backlog process for **${allThreads.length}** threads.`);
+        
+        let processedCount = 0;
+        
+        // El resto del bucle de procesamiento se mantiene igual que la versión anterior.
+        for (let i = 0; i < allThreads.length; i++) {
+            const thread = allThreads[i];
+            const progress = `(${i + 1}/${allThreads.length})`;
+            try {
+                // ... (El bucle for con toda la lógica de desarchivar, reintentar y procesar) ...
+                 const fetchedThread = await client.channels.fetch(thread.id);
+                if (!fetchedThread) continue;
+                
+                let lastMessages = null;
+                try {
+                    if (fetchedThread.archived) await fetchedThread.setArchived(false);
+                    lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
+                } catch (unarchiveError) {
+                    if (unarchiveError.code === 160006) { // Max active threads
+                        console.warn(`[Backlog] ${progress} Max active threads reached. Pausing for 15 seconds before retrying ${thread.name}...`);
+                        await message.channel.send(`> ⚠️ Max active threads limit reached. Pausing for 15 seconds...`);
+                        await new Promise(r => setTimeout(r, 15000));
+                        if (fetchedThread.archived) await fetchedThread.setArchived(false);
+                        lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
+                    } else { throw unarchiveError; }
+                }
+                
+                if(!lastMessages) {
+                     console.warn(`[Backlog] ${progress} Could not fetch messages for thread ${thread.name} after retry. Skipping.`);
+                     continue;
+                }
+
+                const isProcessed = lastMessages.some(m => m.author.id === client.user.id && m.content.toLowerCase().startsWith("thread data for"));
+
+                if (!isProcessed) {
+                    processedCount++;
+                    console.log(`[Backlog] ${progress} Processing thread: ${thread.name}`);
+                    //await message.channel.send(`> ${progress} Processing: **${thread.name}**`);
+                    
+                    await processThread(fetchedThread, "Manual Backlog Process");
+                    
+                    await new Promise(r => setTimeout(r, 2000));
+                } else {
+                    console.log(`[Backlog] ${progress} Skipping already processed thread: ${thread.name}`);
+                    if (!fetchedThread.archived) await fetchedThread.setArchived(true).catch(e => console.error(`Failed to re-archive skipped thread ${fetchedThread.name}: ${e.message}`));
+                }
+            } catch (err) {
+                console.warn(`[Backlog] ${progress} Critical error processing thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`);
+            }
+        }
+        
+        await message.channel.send(`✅ Backlog processing complete! Processed **${processedCount}** new threads.`);
+
+    } catch (error) {
+        console.error("[Backlog] Major error during thread backlog processing:", error);
+        await message.channel.send("A critical error occurred during the backlog process. Check the logs.");
+    }
+  } else if (commandName === "archiveallthreads") {
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("Admin permission required to run this command.");
+    // }
+    
+    const dateString = args[0];
+    const timeString = args[1];
+    let startTimestamp = 0;
+
+    if (dateString) {
+        try {
+            const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
+            const startDate = new Date(fullDateTimeString);
+            if (isNaN(startDate.getTime())) throw new Error("Invalid date or time format.");
+            startTimestamp = startDate.getTime();
+        } catch (e) {
+            return message.reply("Invalid date/time format. Use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
+        }
+    }
+
+    const feedbackDate = dateString ? (timeString ? `created since ${dateString} at ${timeString} UTC` : `created since ${dateString}`) : "in the channel";
+    await message.reply(`Starting mass archival of active threads ${feedbackDate}. This may take a few minutes...`);
+
+    try {
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+            return message.channel.send("Error: Could not find the configured text channel for threads.");
+        }
+
+        const activeThreadsCollection = await parentChannel.threads.fetchActive();
+        
+        const threadsToArchive = Array.from(activeThreadsCollection.threads.values())
+            .filter(t => t.createdTimestamp >= startTimestamp);
+
+        if (threadsToArchive.length === 0) {
+            return message.channel.send(`No active threads found ${feedbackDate} to archive.`);
+        }
+
+        console.log(`[MassArchive] Found ${threadsToArchive.length} active threads to archive matching the time criteria.`);
+        await message.channel.send(`Found **${threadsToArchive.length}** active threads to archive. Starting process...`);
+
+        let archivedCount = 0;
+        for (let i = 0; i < threadsToArchive.length; i++) {
+            const thread = threadsToArchive[i];
+            const progress = `(${i + 1}/${threadsToArchive.length})`;
+
+            // --- LÓGICA CORREGIDA ---
+            try {
+                // Simplemente intentamos archivar. No preguntamos primero.
+                await thread.setArchived(true);
+                archivedCount++;
+                console.log(`[MassArchive] ${progress} Successfully archived thread: ${thread.name}`);
+            } catch (archiveError) {
+                // Si falla, el log nos dirá exactamente por qué.
+                console.warn(`[MassArchive] ${progress} Could not archive thread ${thread.name}. Reason: ${archiveError.message}`);
+            }
+            
+            // Mantenemos la pausa para no saturar la API
+            await new Promise(r => setTimeout(r, 750)); 
+        }
+        
+        await message.channel.send(`✅ Mass archival complete! Successfully archived **${archivedCount}** threads.`);
+
+    } catch (error) {
+        console.error("[MassArchive] Major error during mass archival:", error);
+        await message.channel.send("A critical error occurred during the mass archival process. Check the logs.");
+    }
   }
 });
 
