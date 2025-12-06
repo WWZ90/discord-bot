@@ -54,7 +54,7 @@ const VERIFIER_ID_MAP = {
   "1089240716988919990": "Cha",
   "920460678580547665": "Anglo",
   "927149128440508457": "SolaX",
-  "1125576177101312000": "Kiara",
+  1125576177101312000: "Kiara",
   "631768876597641228": "Brooks",
   "1348003493713023117": "crzu",
   "424567831657709594": "Lonfus",
@@ -709,6 +709,17 @@ async function processTicketChannel(
     for (const msg of allMessagesCollection.values()) {
       const lowerContent = msg.content.toLowerCase();
 
+      if (
+        initiatedBy === "Automatic Scan" &&
+        lowerContent.startsWith("flag:") &&
+        msg.author.id !== client.user.id
+      ) {
+        console.log(
+          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`
+        );
+        return { success: false, reason: "manual_flag_found_on_scan" };
+      }
+
       if (lowerContent.startsWith("ticket data for order")) {
         if (
           msg.author.id === client.user.id &&
@@ -725,20 +736,12 @@ async function processTicketChannel(
           }
           return { success: false, reason: "resent_delete_command" };
         }
-        console.log(
-          `${logPrefix} Found previous processing summary. Aborting.`
-        );
-        return { success: false, reason: "already_processed" };
-      }
-
-      if (
-        lowerContent.startsWith("flag:") &&
-        msg.author.id !== client.user.id
-      ) {
-        console.log(
-          `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
-        );
-        return { success: false, reason: "manual_flag_found" };
+        if (initiatedBy === "Automatic Scan") {
+          console.log(
+            `${logPrefix} Found previous processing summary. Aborting.`
+          );
+          return { success: false, reason: "already_processed" };
+        }
       }
 
       if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
@@ -1250,7 +1253,21 @@ async function processThread(
     for (const msg of threadMessagesCollection.values()) {
       const lowerContent = msg.content.toLowerCase();
 
-      if (lowerContent.startsWith("thread data for")) {
+      if (
+        initiatedByDisplayName === "Automatic Scan" &&
+        lowerContent.startsWith("flag:") &&
+        msg.author.id !== client.user.id
+      ) {
+        console.log(
+          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`
+        );
+        return { success: false, reason: "manual_flag_found_on_scan" };
+      }
+
+      if (
+        lowerContent.startsWith("thread data for") &&
+        initiatedByDisplayName === "Automatic Scan"
+      ) {
         console.log(
           `${logPrefix} Found previous processing summary. Aborting.`
         );
@@ -1258,14 +1275,6 @@ async function processThread(
       }
 
       if (
-        lowerContent.startsWith("flag:") &&
-        msg.author.id !== client.user.id
-      ) {
-        console.log(
-          `${logPrefix} Found manual "Flag:" from user ${msg.author.tag}. Aborting.`
-        );
-        return { success: false, reason: "manual_flag_found" };
-      } else if (
         lowerContent.startsWith("flag:") &&
         msg.author.id === client.user.id
       ) {
@@ -1558,22 +1567,28 @@ async function processThread(
     let majErr = `Error: Major processing error for "${proposalNameForSheet}". Check logs.`;
     if (botConfig.errorNotificationUserID)
       majErr += ` <@${botConfig.errorNotificationUserID}>`;
-    
+
     try {
-        await threadChannel.send(majErr);
+      await threadChannel.send(majErr);
     } catch (sendError) {
-        console.error(`${logPrefix} CRITICAL: Could not even send error message to thread. Error: ${sendError.message}`);
+      console.error(
+        `${logPrefix} CRITICAL: Could not even send error message to thread. Error: ${sendError.message}`
+      );
     }
 
     return { success: false, reason: "unknown_error" };
   } finally {
     if (threadChannel && threadChannel.archivable && !threadChannel.archived) {
-        try {
-            await threadChannel.setArchived(true);
-            console.log(`${logPrefix} Thread successfully archived after processing.`);
-        } catch (archiveError) {
-            console.error(`${logPrefix} Failed to archive thread after processing: ${archiveError.message}`);
-        }
+      try {
+        await threadChannel.setArchived(true);
+        console.log(
+          `${logPrefix} Thread successfully archived after processing.`
+        );
+      } catch (archiveError) {
+        console.error(
+          `${logPrefix} Failed to archive thread after processing: ${archiveError.message}`
+        );
+      }
     }
   }
 }
@@ -1880,199 +1895,467 @@ client.on("messageCreate", async (message) => {
     // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
     //     return message.reply("Admin permission required to run this command.");
     // }
-    
+
     const dateString = args[0];
     const timeString = args[1]; // Nuevo parámetro para la hora
 
     // --- LÓGICA MEJORADA PARA FECHA Y HORA ---
     if (!dateString) {
-        return message.reply("Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`");
+      return message.reply(
+        "Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`"
+      );
     }
 
     let startTimestamp;
     try {
-        // Combinamos la fecha y la hora (si se proporciona) para crear una fecha ISO 8601 completa
-        // Se asume que la hora proporcionada es UTC para evitar confusiones de zona horaria.
-        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
-        const startDate = new Date(fullDateTimeString);
-        
-        if (isNaN(startDate.getTime())) {
-            throw new Error("Invalid date or time format.");
-        }
-        startTimestamp = startDate.getTime();
-        
-        const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
-        await message.reply(`Querying threads created on or after **${feedbackDate}**. Please wait...`);
-        console.log(`[Backlog] Set start timestamp to ${startTimestamp} (${startDate.toISOString()})`);
+      // Combinamos la fecha y la hora (si se proporciona) para crear una fecha ISO 8601 completa
+      // Se asume que la hora proporcionada es UTC para evitar confusiones de zona horaria.
+      const fullDateTimeString = timeString
+        ? `${dateString}T${timeString}:00Z`
+        : `${dateString}T00:00:00Z`;
+      const startDate = new Date(fullDateTimeString);
 
+      if (isNaN(startDate.getTime())) {
+        throw new Error("Invalid date or time format.");
+      }
+      startTimestamp = startDate.getTime();
+
+      const feedbackDate = timeString
+        ? `${dateString} at ${timeString} UTC`
+        : dateString;
+      await message.reply(
+        `Querying threads created on or after **${feedbackDate}**. Please wait...`
+      );
+      console.log(
+        `[Backlog] Set start timestamp to ${startTimestamp} (${startDate.toISOString()})`
+      );
     } catch (e) {
-        return message.reply("Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
+      return message.reply(
+        "Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC)."
+      );
     }
 
-
     try {
-        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
-            return message.channel.send("Error: Could not find the configured text channel for threads.");
+      const parentChannel = await client.channels.fetch(
+        FAILED_TICKETS_FORUM_ID
+      );
+      if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+        return message.channel.send(
+          "Error: Could not find the configured text channel for threads."
+        );
+      }
+
+      // La lógica de escaneo de mensajes es la misma, ya que es la más fiable
+      let allThreads = [];
+      let lastMessageId = null;
+      let fetchMore = true;
+      let scannedMessages = 0;
+      console.log(
+        `[Backlog] Starting deep scan for threads newer than ${new Date(
+          startTimestamp
+        ).toISOString()}`
+      );
+
+      while (fetchMore) {
+        const options = { limit: 100 };
+        if (lastMessageId) {
+          options.before = lastMessageId;
         }
-        
-        // La lógica de escaneo de mensajes es la misma, ya que es la más fiable
-        let allThreads = [];
-        let lastMessageId = null;
-        let fetchMore = true;
-        let scannedMessages = 0;
-        console.log(`[Backlog] Starting deep scan for threads newer than ${new Date(startTimestamp).toISOString()}`);
+        const messages = await parentChannel.messages.fetch(options);
+        scannedMessages += messages.size;
 
-        while(fetchMore) {
-            const options = { limit: 100 };
-            if (lastMessageId) { options.before = lastMessageId; }
-            const messages = await parentChannel.messages.fetch(options);
-            scannedMessages += messages.size;
+        if (messages.size === 0) {
+          fetchMore = false;
+          break;
+        }
 
-            if (messages.size === 0) { fetchMore = false; break; }
+        for (const msg of messages.values()) {
+          if (msg.createdTimestamp < startTimestamp) {
+            fetchMore = false;
+            break;
+          }
+          if (msg.thread) {
+            allThreads.push(msg.thread);
+          }
+        }
 
-            for (const msg of messages.values()) {
-                if (msg.createdTimestamp < startTimestamp) {
-                    fetchMore = false;
-                    break;
-                }
-                if (msg.thread) { allThreads.push(msg.thread); }
+        if (fetchMore) {
+          lastMessageId = messages.lastKey();
+        }
+      }
+
+      console.log(
+        `[Backlog] Deep scan complete. Found ${allThreads.length} potential threads after the specified time.`
+      );
+
+      if (allThreads.length === 0) {
+        return message.channel.send(
+          "No threads found created on or after the specified date and time."
+        );
+      }
+
+      allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+      await message.channel.send(
+        `Scan complete. Starting backlog process for **${allThreads.length}** threads.`
+      );
+
+      let processedCount = 0;
+
+      // El resto del bucle de procesamiento se mantiene igual que la versión anterior.
+      for (let i = 0; i < allThreads.length; i++) {
+        const thread = allThreads[i];
+        const progress = `(${i + 1}/${allThreads.length})`;
+        try {
+          // ... (El bucle for con toda la lógica de desarchivar, reintentar y procesar) ...
+          const fetchedThread = await client.channels.fetch(thread.id);
+          if (!fetchedThread) continue;
+
+          let lastMessages = null;
+          try {
+            if (fetchedThread.archived) await fetchedThread.setArchived(false);
+            lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
+          } catch (unarchiveError) {
+            if (unarchiveError.code === 160006) {
+              // Max active threads
+              console.warn(
+                `[Backlog] ${progress} Max active threads reached. Pausing for 15 seconds before retrying ${thread.name}...`
+              );
+              await message.channel.send(
+                `> ⚠️ Max active threads limit reached. Pausing for 15 seconds...`
+              );
+              await new Promise((r) => setTimeout(r, 15000));
+              if (fetchedThread.archived)
+                await fetchedThread.setArchived(false);
+              lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
+            } else {
+              throw unarchiveError;
             }
+          }
 
-            if(fetchMore) { lastMessageId = messages.lastKey(); }
+          if (!lastMessages) {
+            console.warn(
+              `[Backlog] ${progress} Could not fetch messages for thread ${thread.name} after retry. Skipping.`
+            );
+            continue;
+          }
+
+          const isProcessed = lastMessages.some(
+            (m) =>
+              m.author.id === client.user.id &&
+              m.content.toLowerCase().startsWith("thread data for")
+          );
+
+          if (!isProcessed) {
+            processedCount++;
+            console.log(
+              `[Backlog] ${progress} Processing thread: ${thread.name}`
+            );
+            //await message.channel.send(`> ${progress} Processing: **${thread.name}**`);
+
+            await processThread(fetchedThread, "Manual Backlog Process");
+
+            await new Promise((r) => setTimeout(r, 2000));
+          } else {
+            console.log(
+              `[Backlog] ${progress} Skipping already processed thread: ${thread.name}`
+            );
+            if (!fetchedThread.archived)
+              await fetchedThread
+                .setArchived(true)
+                .catch((e) =>
+                  console.error(
+                    `Failed to re-archive skipped thread ${fetchedThread.name}: ${e.message}`
+                  )
+                );
+          }
+        } catch (err) {
+          console.warn(
+            `[Backlog] ${progress} Critical error processing thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`
+          );
         }
-        
-        console.log(`[Backlog] Deep scan complete. Found ${allThreads.length} potential threads after the specified time.`);
+      }
 
-        if (allThreads.length === 0) {
-            return message.channel.send("No threads found created on or after the specified date and time.");
-        }
-
-        allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-        
-        await message.channel.send(`Scan complete. Starting backlog process for **${allThreads.length}** threads.`);
-        
-        let processedCount = 0;
-        
-        // El resto del bucle de procesamiento se mantiene igual que la versión anterior.
-        for (let i = 0; i < allThreads.length; i++) {
-            const thread = allThreads[i];
-            const progress = `(${i + 1}/${allThreads.length})`;
-            try {
-                // ... (El bucle for con toda la lógica de desarchivar, reintentar y procesar) ...
-                 const fetchedThread = await client.channels.fetch(thread.id);
-                if (!fetchedThread) continue;
-                
-                let lastMessages = null;
-                try {
-                    if (fetchedThread.archived) await fetchedThread.setArchived(false);
-                    lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
-                } catch (unarchiveError) {
-                    if (unarchiveError.code === 160006) { // Max active threads
-                        console.warn(`[Backlog] ${progress} Max active threads reached. Pausing for 15 seconds before retrying ${thread.name}...`);
-                        await message.channel.send(`> ⚠️ Max active threads limit reached. Pausing for 15 seconds...`);
-                        await new Promise(r => setTimeout(r, 15000));
-                        if (fetchedThread.archived) await fetchedThread.setArchived(false);
-                        lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
-                    } else { throw unarchiveError; }
-                }
-                
-                if(!lastMessages) {
-                     console.warn(`[Backlog] ${progress} Could not fetch messages for thread ${thread.name} after retry. Skipping.`);
-                     continue;
-                }
-
-                const isProcessed = lastMessages.some(m => m.author.id === client.user.id && m.content.toLowerCase().startsWith("thread data for"));
-
-                if (!isProcessed) {
-                    processedCount++;
-                    console.log(`[Backlog] ${progress} Processing thread: ${thread.name}`);
-                    //await message.channel.send(`> ${progress} Processing: **${thread.name}**`);
-                    
-                    await processThread(fetchedThread, "Manual Backlog Process");
-                    
-                    await new Promise(r => setTimeout(r, 2000));
-                } else {
-                    console.log(`[Backlog] ${progress} Skipping already processed thread: ${thread.name}`);
-                    if (!fetchedThread.archived) await fetchedThread.setArchived(true).catch(e => console.error(`Failed to re-archive skipped thread ${fetchedThread.name}: ${e.message}`));
-                }
-            } catch (err) {
-                console.warn(`[Backlog] ${progress} Critical error processing thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`);
-            }
-        }
-        
-        await message.channel.send(`✅ Backlog processing complete! Processed **${processedCount}** new threads.`);
-
+      await message.channel.send(
+        `✅ Backlog processing complete! Processed **${processedCount}** new threads.`
+      );
     } catch (error) {
-        console.error("[Backlog] Major error during thread backlog processing:", error);
-        await message.channel.send("A critical error occurred during the backlog process. Check the logs.");
+      console.error(
+        "[Backlog] Major error during thread backlog processing:",
+        error
+      );
+      await message.channel.send(
+        "A critical error occurred during the backlog process. Check the logs."
+      );
     }
   } else if (commandName === "archiveallthreads") {
     // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
     //     return message.reply("Admin permission required to run this command.");
     // }
-    
+
     const dateString = args[0];
     const timeString = args[1];
     let startTimestamp = 0;
 
     if (dateString) {
-        try {
-            const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
-            const startDate = new Date(fullDateTimeString);
-            if (isNaN(startDate.getTime())) throw new Error("Invalid date or time format.");
-            startTimestamp = startDate.getTime();
-        } catch (e) {
-            return message.reply("Invalid date/time format. Use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
-        }
+      try {
+        const fullDateTimeString = timeString
+          ? `${dateString}T${timeString}:00Z`
+          : `${dateString}T00:00:00Z`;
+        const startDate = new Date(fullDateTimeString);
+        if (isNaN(startDate.getTime()))
+          throw new Error("Invalid date or time format.");
+        startTimestamp = startDate.getTime();
+      } catch (e) {
+        return message.reply(
+          "Invalid date/time format. Use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC)."
+        );
+      }
     }
 
-    const feedbackDate = dateString ? (timeString ? `created since ${dateString} at ${timeString} UTC` : `created since ${dateString}`) : "in the channel";
-    await message.reply(`Starting mass archival of active threads ${feedbackDate}. This may take a few minutes...`);
+    const feedbackDate = dateString
+      ? timeString
+        ? `created since ${dateString} at ${timeString} UTC`
+        : `created since ${dateString}`
+      : "in the channel";
+    await message.reply(
+      `Starting mass archival of active threads ${feedbackDate}. This may take a few minutes...`
+    );
 
     try {
-        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
-            return message.channel.send("Error: Could not find the configured text channel for threads.");
+      const parentChannel = await client.channels.fetch(
+        FAILED_TICKETS_FORUM_ID
+      );
+      if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+        return message.channel.send(
+          "Error: Could not find the configured text channel for threads."
+        );
+      }
+
+      const activeThreadsCollection = await parentChannel.threads.fetchActive();
+
+      const threadsToArchive = Array.from(
+        activeThreadsCollection.threads.values()
+      ).filter((t) => t.createdTimestamp >= startTimestamp);
+
+      if (threadsToArchive.length === 0) {
+        return message.channel.send(
+          `No active threads found ${feedbackDate} to archive.`
+        );
+      }
+
+      console.log(
+        `[MassArchive] Found ${threadsToArchive.length} active threads to archive matching the time criteria.`
+      );
+      await message.channel.send(
+        `Found **${threadsToArchive.length}** active threads to archive. Starting process...`
+      );
+
+      let archivedCount = 0;
+      for (let i = 0; i < threadsToArchive.length; i++) {
+        const thread = threadsToArchive[i];
+        const progress = `(${i + 1}/${threadsToArchive.length})`;
+
+        // --- LÓGICA CORREGIDA ---
+        try {
+          // Simplemente intentamos archivar. No preguntamos primero.
+          await thread.setArchived(true);
+          archivedCount++;
+          console.log(
+            `[MassArchive] ${progress} Successfully archived thread: ${thread.name}`
+          );
+        } catch (archiveError) {
+          // Si falla, el log nos dirá exactamente por qué.
+          console.warn(
+            `[MassArchive] ${progress} Could not archive thread ${thread.name}. Reason: ${archiveError.message}`
+          );
         }
 
-        const activeThreadsCollection = await parentChannel.threads.fetchActive();
-        
-        const threadsToArchive = Array.from(activeThreadsCollection.threads.values())
-            .filter(t => t.createdTimestamp >= startTimestamp);
+        // Mantenemos la pausa para no saturar la API
+        await new Promise((r) => setTimeout(r, 750));
+      }
 
-        if (threadsToArchive.length === 0) {
-            return message.channel.send(`No active threads found ${feedbackDate} to archive.`);
-        }
-
-        console.log(`[MassArchive] Found ${threadsToArchive.length} active threads to archive matching the time criteria.`);
-        await message.channel.send(`Found **${threadsToArchive.length}** active threads to archive. Starting process...`);
-
-        let archivedCount = 0;
-        for (let i = 0; i < threadsToArchive.length; i++) {
-            const thread = threadsToArchive[i];
-            const progress = `(${i + 1}/${threadsToArchive.length})`;
-
-            // --- LÓGICA CORREGIDA ---
-            try {
-                // Simplemente intentamos archivar. No preguntamos primero.
-                await thread.setArchived(true);
-                archivedCount++;
-                console.log(`[MassArchive] ${progress} Successfully archived thread: ${thread.name}`);
-            } catch (archiveError) {
-                // Si falla, el log nos dirá exactamente por qué.
-                console.warn(`[MassArchive] ${progress} Could not archive thread ${thread.name}. Reason: ${archiveError.message}`);
-            }
-            
-            // Mantenemos la pausa para no saturar la API
-            await new Promise(r => setTimeout(r, 750)); 
-        }
-        
-        await message.channel.send(`✅ Mass archival complete! Successfully archived **${archivedCount}** threads.`);
-
+      await message.channel.send(
+        `✅ Mass archival complete! Successfully archived **${archivedCount}** threads.`
+      );
     } catch (error) {
-        console.error("[MassArchive] Major error during mass archival:", error);
-        await message.channel.send("A critical error occurred during the mass archival process. Check the logs.");
+      console.error("[MassArchive] Major error during mass archival:", error);
+      await message.channel.send(
+        "A critical error occurred during the mass archival process. Check the logs."
+      );
+    }
+  } else if (commandName === "findduplicates") {
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("Admin permission required to run this command.");
+    // }
+    await message.reply(
+      "🔍 Starting scan for duplicate tickets... This may take a moment as I'm checking both sheets."
+    );
+
+    try {
+      await googleDoc.loadInfo();
+      const findoorSheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_FINDOOR];
+      const verificationsSheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
+
+      if (!findoorSheet || !verificationsSheet) {
+        return message.channel.send(
+          "Error: Could not find the required worksheets ('Findoors' and 'Verifications')."
+        );
+      }
+
+      // 1. Cargar todos los OO Links de los threads en un Set para una búsqueda rápida
+      console.log("[Duplicates] Fetching all OO Links from Findoors sheet...");
+      const findoorRows = await findoorSheet.getRows();
+      const findoorLinks = new Set(
+        findoorRows.map((row) => row.get("OO Link")).filter(Boolean)
+      );
+      console.log(
+        `[Duplicates] Loaded ${findoorLinks.size} unique links from Findoors.`
+      );
+
+      // 2. Revisar la hoja de Verifications y comparar
+      console.log("[Duplicates] Scanning Verifications sheet for matches...");
+      const verificationsRows = await verificationsSheet.getRows();
+      const duplicatesFound = [];
+
+      for (const row of verificationsRows) {
+        const ticketLink = row.get("OO Link");
+        const primaryValue = row.get("Primary");
+
+        // Es un duplicado si el link está en la lista de threads Y no está ya marcado como "Duplicate"
+        if (
+          ticketLink &&
+          findoorLinks.has(ticketLink) &&
+          primaryValue &&
+          primaryValue.toLowerCase() !== "duplicate"
+        ) {
+          duplicatesFound.push({
+            order: row.get(ORDER_COLUMN_HEADER),
+            link: ticketLink,
+          });
+        }
+      }
+
+      if (duplicatesFound.length === 0) {
+        return message.channel.send(
+          "✅ No unprocessed duplicate tickets were found."
+        );
+      }
+
+      // 3. Enviar los resultados en trozos para evitar el límite de caracteres de Discord
+      let response = `**Found ${duplicatesFound.length} potential duplicate tickets to review:**\n`;
+      for (let i = 0; i < duplicatesFound.length; i++) {
+        const duplicate = duplicatesFound[i];
+        const line = `Ticket Order #${duplicate.order}\n`;
+        if (response.length + line.length > 1900) {
+          await message.channel.send(response);
+          response = "";
+        }
+        response += line;
+      }
+      await message.channel.send(response);
+    } catch (error) {
+      console.error("[Duplicates] Error during findduplicates command:", error);
+      await message.channel.send(
+        "An error occurred while scanning for duplicates. Check the logs."
+      );
+    }
+  } else if (commandName === "fixduplicates") {
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("Admin permission required to run this command.");
+    // }
+    if (args[0] !== "confirm") {
+      return message.reply(
+        "This is a destructive action. To proceed, run the command again with `confirm`.\n**Example:** `!fixduplicates confirm`"
+      );
+    }
+
+    await message.reply(
+      "⚙️ Starting automatic fix for duplicate tickets... This will modify the spreadsheet and may take some time."
+    );
+
+    try {
+      await googleDoc.loadInfo();
+      const findoorSheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_FINDOOR];
+      const verificationsSheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
+      if (!findoorSheet || !verificationsSheet) {
+        /* ... error handling ... */
+      }
+
+      console.log(
+        "[FixDuplicates] Fetching all OO Links from Findoors sheet..."
+      );
+      const findoorRows = await findoorSheet.getRows();
+      const findoorLinks = new Set(
+        findoorRows.map((row) => row.get("OO Link")).filter(Boolean)
+      );
+      console.log(`[FixDuplicates] Loaded ${findoorLinks.size} unique links.`);
+
+      console.log(
+        "[FixDuplicates] Scanning Verifications sheet to find and update matches..."
+      );
+      const verificationsRows = await verificationsSheet.getRows();
+      let updatedCount = 0;
+
+      for (const row of verificationsRows) {
+        const ticketLink = row.get("OO Link");
+        const primaryValue = row.get("Primary");
+
+        if (
+          ticketLink &&
+          findoorLinks.has(ticketLink) &&
+          primaryValue &&
+          primaryValue.toLowerCase() !== "duplicate"
+        ) {
+          console.log(
+            `[FixDuplicates] Updating Order #${row.get(
+              ORDER_COLUMN_HEADER
+            )} to "Duplicate".`
+          );
+          row.set("Primary", "Duplicate");
+          row.set("Secondary", "");
+          row.set("Tertiary", "");
+          row.set("bonker 1", "");
+          row.set("bonker 2", "");
+          row.set("bonker 3", "");
+          row.set("bonker 4", "");
+          row.set("bonker 5", "");
+          row.set("bonker 6", "");
+          row.set("bonker 7", "");
+          row.set("bonker 8", "");
+          row.set("bonker 9", "");
+          row.set("bonker 10", "");
+          row.set("bonker 11", "");
+          row.set("BONKED 1", "");
+          row.set("BONKED 2", "");
+          row.set("BONKED 3", "");
+          row.set("BONKED 4", "");
+
+          await row.save(); // Guarda los cambios en la fila
+          updatedCount++;
+
+          // Pausa para no sobrecargar la API de Google Sheets
+          await new Promise((r) => setTimeout(r, 2000));
+        }
+      }
+
+      if (updatedCount > 0) {
+        await message.channel.send(
+          `✅ **Fix complete!** Successfully updated **${updatedCount}** duplicate ticket rows.`
+        );
+      } else {
+        await message.channel.send(
+          "✅ No unprocessed duplicate tickets were found to fix."
+        );
+      }
+    } catch (error) {
+      console.error(
+        "[FixDuplicates] Error during fixduplicates command:",
+        error
+      );
+      await message.channel.send(
+        "An error occurred while fixing duplicates. Check the logs. Some rows may have been updated."
+      );
     }
   }
 });
