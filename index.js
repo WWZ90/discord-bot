@@ -652,6 +652,59 @@ async function upsertRowByProposalName(proposalNameKey, dataToUpsert) {
   }
 }
 
+async function autoArchiveInactiveThreads() {
+    const logPrefix = "[Auto-Archive]";
+    console.log(`${logPrefix} Starting routine to archive inactive threads...`);
+
+    try {
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+            console.log(`${logPrefix} Could not find the configured text channel. Aborting.`);
+            return;
+        }
+
+        const activeThreads = await parentChannel.threads.fetchActive();
+        if (activeThreads.threads.size === 0) {
+            console.log(`${logPrefix} No active threads found to check. Routine finished.`);
+            return;
+        }
+
+        const archiveThresholdMs = 24 * 60 * 60 * 1000; 
+        const now = Date.now();
+        let archivedCount = 0;
+
+        for (const thread of activeThreads.threads.values()) {
+
+            const lastMessages = await thread.messages.fetch({ limit: 1 }).catch(() => null);
+            
+            const lastActivityTimestamp = lastMessages?.first()?.createdTimestamp || thread.createdTimestamp;
+            const inactivityDuration = now - lastActivityTimestamp;
+
+            if (inactivityDuration > archiveThresholdMs) {
+                try {
+                    if (!thread.archived) {
+                        await thread.setArchived(true, 'Automatic cleanup of inactive thread');
+                        console.log(`${logPrefix} Successfully archived inactive thread: ${thread.name}`);
+                        archivedCount++;
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                } catch (err) {
+                    console.error(`${logPrefix} Failed to archive thread ${thread.name}. Error:`, err.message);
+                }
+            }
+        }
+
+        if (archivedCount > 0) {
+            console.log(`${logPrefix} Routine finished. Archived ${archivedCount} inactive thread(s).`);
+        } else {
+            console.log(`${logPrefix} Routine finished. No threads met the inactivity criteria for archiving.`);
+        }
+
+    } catch (error) {
+        console.error(`${logPrefix} A critical error occurred during the auto-archive routine:`, error);
+    }
+}
+
 async function processTicketChannel(
   channel,
   initiatedBy = "Automatic Scan",
@@ -2555,14 +2608,13 @@ async function processFallbackQueue() {
     fallbackQueue.push(...newFallbackQueue);
 
     for (const item of itemsToProcess) {
-      const targetChannel = await client.channels
-        .fetch(FAILED_TICKETS_FORUM_ID)
-        .catch(() => null);
-
       try {
-        console.log(
-          `[Supervisor] Creating fallback thread for "${item.title}"...`
-        );
+        const targetChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!targetChannel || (targetChannel.type !== ChannelType.GuildForum && targetChannel.type !== ChannelType.GuildText)) {
+            throw new Error("Target channel not found or is not a text/forum channel.");
+        }
+
+        console.log(`[Supervisor] Attempting to create fallback thread for "${item.title}"...`);
         const starterMessage = await targetChannel.send(
           `This ticket did not create after 20 mins ${item.messageLink}`
         );
@@ -2571,19 +2623,18 @@ async function processFallbackQueue() {
           name: item.title,
         });
 
-        console.log(
-          `[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`
-        );
-
+        console.log(`[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`);
         createdFallbackThreads.set(item.uniqueId, Date.now());
-        console.log(
-          `[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`
-        );
+        console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
+      
       } catch (error) {
-        console.error(
-          `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
-          error
-        );
+        console.error(`[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`, error.message);
+
+        console.log(`[Supervisor] Thread limit reached! Triggering an emergency archive routine...`);
+        await message.channel.send("⚠️ Thread limit reached. Running an emergency cleanup. The threads will be created shortly."); 
+        await autoArchiveInactiveThreads();
+        
+        console.log(`[Supervisor] Re-queuing item "${item.title}" for a later attempt.`);
         fallbackQueue.push(item);
       }
 
@@ -2916,6 +2967,12 @@ async function initializeBot() {
       );
     }
   });
+
+  cron.schedule('0 */4 * * *', () => {
+      console.log("[Cron] Triggering scheduled inactive thread archival routine.");
+      autoArchiveInactiveThreads();
+  });
+  console.log("Scheduled inactive thread archival to run every 4 hours.");
 
   setInterval(processFallbackQueue, FALLBACK_QUEUE_PROCESS_INTERVAL_MS);
   console.log(
