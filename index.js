@@ -1311,6 +1311,10 @@ async function processThread(
         return { success: false, reason: "manual_flag_found_on_scan", status: 'flagged' };
       }
 
+      if (lowerContent.startsWith("thread data for") && initiatedByDisplayName !== "Forced Reprocess by Admin") {
+        return { success: false, reason: "already_processed" };
+      }
+
       // if (
       //   lowerContent.startsWith("thread data for")
       // ) {
@@ -1329,6 +1333,8 @@ async function processThread(
 
       if (lowerContent.includes("bonk")) {
         bonkFound = true;
+        // --- LOG DE DEPURACIÓN ---
+        console.log(`[DEBUG - BONK DETECTED] Thread: ${threadChannel.name} | Message ID: ${msg.id} | Author: ${msg.author.tag} | Content: "${msg.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
       }
 
       if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
