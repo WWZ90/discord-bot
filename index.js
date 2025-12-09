@@ -2098,10 +2098,7 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "forcereprocess") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("!! DANGER !! Admin permission required for this destructive command.");
-    // }
-    
+
     const dateString = args[0];
     if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
         return message.reply("Please provide a start date in YYYY-MM-DD format. Example: `!forcereprocess 2023-12-06`");
