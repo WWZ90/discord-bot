@@ -1950,9 +1950,8 @@ client.on("messageCreate", async (message) => {
     // }
 
     const dateString = args[0];
-    const timeString = args[1]; // Nuevo parámetro para la hora
+    const timeString = args[1]; 
 
-    // --- LÓGICA MEJORADA PARA FECHA Y HORA ---
     if (!dateString) {
       return message.reply(
         "Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`"
@@ -1961,8 +1960,6 @@ client.on("messageCreate", async (message) => {
 
     let startTimestamp;
     try {
-      // Combinamos la fecha y la hora (si se proporciona) para crear una fecha ISO 8601 completa
-      // Se asume que la hora proporcionada es UTC para evitar confusiones de zona horaria.
       const fullDateTimeString = timeString
         ? `${dateString}T${timeString}:00Z`
         : `${dateString}T00:00:00Z`;
@@ -1978,9 +1975,6 @@ client.on("messageCreate", async (message) => {
         : dateString;
       await message.reply(
         `Querying threads created on or after **${feedbackDate}**. Please wait...`
-      );
-      console.log(
-        `[Backlog] Set start timestamp to ${startTimestamp} (${startDate.toISOString()})`
       );
     } catch (e) {
       return message.reply(
@@ -1998,16 +1992,10 @@ client.on("messageCreate", async (message) => {
         );
       }
 
-      // La lógica de escaneo de mensajes es la misma, ya que es la más fiable
       let allThreads = [];
       let lastMessageId = null;
       let fetchMore = true;
-      let scannedMessages = 0;
-      console.log(
-        `[Backlog] Starting deep scan for threads newer than ${new Date(
-          startTimestamp
-        ).toISOString()}`
-      );
+      console.log(`[Backlog] Starting deep scan for threads newer than ${new Date(startTimestamp).toISOString()}`);
 
       while (fetchMore) {
         const options = { limit: 100 };
@@ -2015,7 +2003,6 @@ client.on("messageCreate", async (message) => {
           options.before = lastMessageId;
         }
         const messages = await parentChannel.messages.fetch(options);
-        scannedMessages += messages.size;
 
         if (messages.size === 0) {
           fetchMore = false;
@@ -2037,9 +2024,7 @@ client.on("messageCreate", async (message) => {
         }
       }
 
-      console.log(
-        `[Backlog] Deep scan complete. Found ${allThreads.length} potential threads after the specified time.`
-      );
+      console.log(`[Backlog] Deep scan complete. Found ${allThreads.length} potential threads.`);
 
       if (allThreads.length === 0) {
         return message.channel.send(
@@ -2050,93 +2035,73 @@ client.on("messageCreate", async (message) => {
       allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
       await message.channel.send(
-        `Scan complete. Starting backlog process for **${allThreads.length}** threads.`
+        `Scan complete. Starting backlog process for **${allThreads.length}** threads. Each will be re-archived.`
       );
 
       let processedCount = 0;
+      let failedCount = 0;
 
-      // El resto del bucle de procesamiento se mantiene igual que la versión anterior.
       for (let i = 0; i < allThreads.length; i++) {
         const thread = allThreads[i];
         const progress = `(${i + 1}/${allThreads.length})`;
+
         try {
-          // ... (El bucle for con toda la lógica de desarchivar, reintentar y procesar) ...
-          const fetchedThread = await client.channels.fetch(thread.id);
-          if (!fetchedThread) continue;
-
-          let lastMessages = null;
-          try {
-            if (fetchedThread.archived) await fetchedThread.setArchived(false);
-            lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
-          } catch (unarchiveError) {
-            if (unarchiveError.code === 160006) {
-              // Max active threads
-              console.warn(
-                `[Backlog] ${progress} Max active threads reached. Pausing for 15 seconds before retrying ${thread.name}...`
-              );
-              await message.channel.send(
-                `> ⚠️ Max active threads limit reached. Pausing for 15 seconds...`
-              );
-              await new Promise((r) => setTimeout(r, 15000));
-              if (fetchedThread.archived)
-                await fetchedThread.setArchived(false);
-              lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
-            } else {
-              throw unarchiveError;
-            }
-          }
-
-          if (!lastMessages) {
-            console.warn(
-              `[Backlog] ${progress} Could not fetch messages for thread ${thread.name} after retry. Skipping.`
-            );
+          const fetchedThread = await client.channels.fetch(thread.id).catch(() => null);
+          if (!fetchedThread) {
+            console.warn(`[Backlog] ${progress} Could not fetch thread ${thread.name}. It might have been deleted. Skipping.`);
             continue;
           }
+          
+          const wasArchived = fetchedThread.archived;
 
-          const isProcessed = lastMessages.some(
-            (m) =>
-              m.author.id === client.user.id &&
-              m.content.toLowerCase().startsWith("thread data for")
+          if (wasArchived) {
+              await fetchedThread.setArchived(false);
+          }
+          
+          const lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
+          const isProcessed = lastMessages.some(m => 
+              m.author.id === client.user.id && m.content.toLowerCase().startsWith("thread data for")
           );
 
           if (!isProcessed) {
             processedCount++;
-            console.log(
-              `[Backlog] ${progress} Processing thread: ${thread.name}`
-            );
-            //await message.channel.send(`> ${progress} Processing: **${thread.name}**`);
-
+            console.log(`[Backlog] ${progress} Processing thread: ${fetchedThread.name}`);
             await processThread(fetchedThread, "Manual Backlog Process");
 
-            await new Promise((r) => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS)); 
           } else {
-            console.log(
-              `[Backlog] ${progress} Skipping already processed thread: ${thread.name}`
-            );
-            if (!fetchedThread.archived)
-              await fetchedThread
-                .setArchived(true)
-                .catch((e) =>
-                  console.error(
-                    `Failed to re-archive skipped thread ${fetchedThread.name}: ${e.message}`
-                  )
-                );
+            console.log(`[Backlog] ${progress} Skipping already processed thread: ${fetchedThread.name}`);
           }
+          
+          if (!fetchedThread.archived) {
+              await fetchedThread.setArchived(true, "Backlog processing cleanup");
+          }
+
         } catch (err) {
-          console.warn(
-            `[Backlog] ${progress} Critical error processing thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`
-          );
+            failedCount++;
+            if (err.message.toLowerCase().includes('maximum number of active threads')) {
+                console.warn(`[Backlog] ${progress} Max active threads limit reached. Pausing for 30 seconds...`);
+                await message.channel.send(`⚠️ Max active threads limit reached. Pausing for 30 seconds to recover...`);
+                await new Promise(r => setTimeout(r, 30000));
+                i--; 
+                continue;
+            }
+            console.warn(`[Backlog] ${progress} Critical error on thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`);
+
+            try {
+                const errorThread = await client.channels.fetch(thread.id).catch(() => null);
+                if (errorThread && !errorThread.archived) {
+                    await errorThread.setArchived(true, "Archiving after error");
+                }
+            } catch (archiveErr) { }
         }
       }
 
       await message.channel.send(
-        `✅ Backlog processing complete! Processed **${processedCount}** new threads.`
+        `✅ Backlog processing complete! \n- Processed: **${processedCount}** new threads. \n- Skipped/Failed: **${failedCount}**.`
       );
     } catch (error) {
-      console.error(
-        "[Backlog] Major error during thread backlog processing:",
-        error
-      );
+      console.error("[Backlog] Major error during thread backlog processing:", error);
       await message.channel.send(
         "A critical error occurred during the backlog process. Check the logs."
       );
