@@ -2094,7 +2094,7 @@ client.on("messageCreate", async (message) => {
       }
 
       await message.channel.send(
-        `✅ Backlog processing complete! \n- Processed: **${processedCount}** new threads. \n- Skipped/Failed: **${failedCount}**.`
+        `✅ Backlog processing complete! \n- Processed: **${processedCount}** new threads. \n- Flagged for review: **${flaggedCount}** (left active). \n- Skipped/Failed: **${failedCount}**.`
       );
     } catch (error) {
       console.error("[Backlog] Major error during thread backlog processing:", error);
