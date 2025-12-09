@@ -2104,13 +2104,33 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "forcereprocess") {
-
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("!! DANGER !! Admin permission required for this destructive command.");
+    // }
+    
     const dateString = args[0];
-    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
-        return message.reply("Please provide a start date in YYYY-MM-DD format. Example: `!forcereprocess 2023-12-06`");
+    const timeString = args[1]; // Nuevo parámetro para la hora
+
+    // --- LÓGICA MEJORADA PARA FECHA Y HORA ---
+    if (!dateString) {
+        return message.reply("Please provide a start date. \n**Format:** `!forcereprocess YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!forcereprocess 2023-12-06 14:30`");
     }
 
-    const confirmation = await message.reply("⚠️ **WARNING:** This command will re-process ALL threads since the specified date, ignoring any previous processing messages. This will create new rows for missing threads and update existing ones based on their OO Link. This can take a very long time and spam the channels. Are you sure you want to continue? Type `YES` to confirm.");
+    let startTimestamp;
+    try {
+        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
+        const startDate = new Date(fullDateTimeString);
+        if (isNaN(startDate.getTime())) {
+            throw new Error("Invalid date or time format.");
+        }
+        startTimestamp = startDate.getTime();
+    } catch (e) {
+        return message.reply("Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
+    }
+    
+    const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
+
+    const confirmation = await message.reply(`⚠️ **WARNING:** This command will re-process ALL threads created on or after **${feedbackDate}**. It will re-archive each thread. This can take a very long time. Are you sure? Type \`YES\` to confirm.`);
 
     const filter = m => m.author.id === message.author.id && m.content.toUpperCase() === 'YES';
     try {
@@ -2119,18 +2139,14 @@ client.on("messageCreate", async (message) => {
         return confirmation.edit("Confirmation timed out. Reprocessing cancelled.");
     }
     
-    await confirmation.edit(`Confirmed. Starting FORCE REPROCESSING for threads created on or after ${dateString}. Please be patient.`);
+    await confirmation.edit(`Confirmed. Starting FORCE REPROCESSING for threads since **${feedbackDate}**. Each thread will be re-archived.`);
 
     try {
-        const startDate = new Date(dateString);
-        const startTimestamp = startDate.getTime();
-
         const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
         if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
             return message.channel.send("Error: Could not find the configured text channel.");
         }
 
-        // Usamos el método de escaneo profundo para asegurar que encontramos todos los hilos en orden
         let allThreads = [];
         let lastMessageId = null;
         let fetchMore = true;
@@ -2147,7 +2163,7 @@ client.on("messageCreate", async (message) => {
         }
 
         if (allThreads.length === 0) {
-            return message.channel.send("No threads found to re-process after the specified date.");
+            return message.channel.send("No threads found to re-process after the specified date and time.");
         }
         
         allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
@@ -2159,28 +2175,20 @@ client.on("messageCreate", async (message) => {
             const progress = `(${i + 1}/${allThreads.length})`;
             
             try {
-                // --- LA MAGIA ESTÁ AQUÍ ---
-                // Llamamos a processThread, pero el truco es que processThread ahora
-                // ya no tiene la lógica para saltarse hilos procesados.
-                // Le pasamos un "initiator" especial para los logs.
                 const fetchedThread = await client.channels.fetch(thread.id);
+                
                 console.log(`[Force Reprocess] ${progress} Processing thread: ${fetchedThread.name}`);
                 
-                // No enviamos mensaje al canal para no spamear
-                // await message.channel.send(`> ${progress} Reprocessing: **${fetchedThread.name}**`);
-                
                 await processThread(fetchedThread, "Forced Reprocess by Admin");
-
+                
                 if (fetchedThread && !fetchedThread.archived) {
                     await fetchedThread.setArchived(true, "Forced re-process cleanup");
                 }
                 
-                // La pausa es crucial
                 await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS));
 
             } catch (err) {
                  console.warn(`[Force Reprocess] ${progress} Failed to re-process thread ${thread.name}. Error: ${err.message}`);
-                 // Intentar archivar incluso si falla
                  try {
                      const errorThread = await client.channels.fetch(thread.id).catch(() => null);
                      if (errorThread && !errorThread.archived) {
