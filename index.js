@@ -1331,9 +1331,9 @@ async function processThread(
         botFlagFound = true;
       }
 
-      if (lowerContent.includes("bonk")) {
+      if (/\bbonk\b/.test(lowerContent)) {
         bonkFound = true;
-        // --- LOG DE DEPURACIÓN ---
+        // --- LOG DE DEPURACIÓN (mantenlo por si acaso) ---
         console.log(`[DEBUG - BONK DETECTED] Thread: ${threadChannel.name} | Message ID: ${msg.id} | Author: ${msg.author.tag} | Content: "${msg.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
       }
 
@@ -2111,7 +2111,6 @@ client.on("messageCreate", async (message) => {
     const dateString = args[0];
     const timeString = args[1]; // Nuevo parámetro para la hora
 
-    // --- LÓGICA MEJORADA PARA FECHA Y HORA ---
     if (!dateString) {
         return message.reply("Please provide a start date. \n**Format:** `!forcereprocess YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!forcereprocess 2023-12-06 14:30`");
     }
