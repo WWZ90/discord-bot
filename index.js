@@ -565,8 +565,8 @@ async function upsertRowByOrderValue(
   }
 }
 
-async function upsertRowByProposalName(proposalNameKey, dataToUpsert) {
-  const logPrefix = `[Thread: ${proposalNameKey}]`;
+async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
+  const logPrefix = `[Thread: ${ooLinkKey}]`;
   if (!googleDoc) {
     console.error(
       `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`
@@ -591,27 +591,21 @@ async function upsertRowByProposalName(proposalNameKey, dataToUpsert) {
       };
     }
     await sheet.loadHeaderRow();
-    if (!sheet.headerValues.includes(PROPOSAL_COLUMN_HEADER_FOR_SHEET)) {
-      console.error(
-        `${logPrefix} Error: Key Column "${PROPOSAL_COLUMN_HEADER_FOR_SHEET}" not in sheet. Cannot upsert by proposal name.`
-      );
-      return {
-        success: false,
-        action: "none",
-        message: `Key Column "${PROPOSAL_COLUMN_HEADER_FOR_SHEET}" not found.`,
-      };
+
+    const keyColumnHeader = "OO Link";
+    if (!sheet.headerValues.includes(keyColumnHeader)) {
+      console.error(`${logPrefix} Error: Key Column "${keyColumnHeader}" not in sheet. Cannot upsert by OO Link.`);
+      return { success: false, action: "none", message: `Key Column "${keyColumnHeader}" not found.` };
     }
 
     const rows = await sheet.getRows();
     let targetRow = null;
 
     for (let i = 0; i < rows.length; i++) {
-      let cellProposalValue = rows[i].get(PROPOSAL_COLUMN_HEADER_FOR_SHEET);
-      if (cellProposalValue !== null && cellProposalValue !== undefined) {
-        if (cellProposalValue.toString().trim() === proposalNameKey.trim()) {
-          targetRow = rows[i];
-          break;
-        }
+      const cellOoLinkValue = rows[i].get(keyColumnHeader);
+      if (cellOoLinkValue && cellOoLinkValue.toString().trim() === ooLinkKey.trim()) {
+        targetRow = rows[i];
+        break;
       }
     }
 
@@ -622,10 +616,11 @@ async function upsertRowByProposalName(proposalNameKey, dataToUpsert) {
           ? ""
           : dataToUpsert[key];
     }
-    dataForSheet[PROPOSAL_COLUMN_HEADER_FOR_SHEET] = proposalNameKey;
+
+    dataForSheet[keyColumnHeader] = ooLinkKey;
 
     if (targetRow) {
-      console.log(`${logPrefix} Row found by Proposal Name. Updating...`);
+      console.log(`${logPrefix} Row found by OO Link. Updating...`);
       for (const key in dataForSheet) {
         if (sheet.headerValues.includes(key))
           targetRow.set(key, dataForSheet[key]);
@@ -635,7 +630,7 @@ async function upsertRowByProposalName(proposalNameKey, dataToUpsert) {
       return { success: true, action: "updated" };
     } else {
       console.log(
-        `${logPrefix} No row found for Proposal "${proposalNameKey}". Adding new row...`
+        `${logPrefix} No row found for OO Link "${ooLinkKey}". Adding new row...`
       );
       await sheet.addRow(dataForSheet);
       console.log(`${logPrefix} New row added.`);
@@ -1316,14 +1311,14 @@ async function processThread(
         return { success: false, reason: "manual_flag_found_on_scan", status: 'flagged' };
       }
 
-      if (
-        lowerContent.startsWith("thread data for")
-      ) {
-        console.log(
-          `${logPrefix} Found previous processing summary. Aborting.`
-        );
-        return { success: false, reason: "already_processed" };
-      }
+      // if (
+      //   lowerContent.startsWith("thread data for")
+      // ) {
+      //   console.log(
+      //     `${logPrefix} Found previous processing summary. Aborting.`
+      //   );
+      //   return { success: false, reason: "already_processed" };
+      // }
 
       if (
         lowerContent.startsWith("flag:") &&
@@ -1565,7 +1560,7 @@ async function processThread(
       return { success: false, reason: "sheets_not_configured" };
     }
 
-    const result = await upsertRowByProposalName(proposalNameForSheet, rowData);
+    const result = await upsertRowByOoLink(ooLink, rowData);
 
     if (result.success) {
       console.log(`${logPrefix} Data ${result.action}.`);
@@ -2101,6 +2096,91 @@ client.on("messageCreate", async (message) => {
       await message.channel.send(
         "A critical error occurred during the backlog process. Check the logs."
       );
+    }
+  } else if (commandName === "forcereprocess") {
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+        return message.reply("!! DANGER !! Admin permission required for this destructive command.");
+    }
+    
+    const dateString = args[0];
+    if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+        return message.reply("Please provide a start date in YYYY-MM-DD format. Example: `!forcereprocess 2023-12-06`");
+    }
+
+    const confirmation = await message.reply("⚠️ **WARNING:** This command will re-process ALL threads since the specified date, ignoring any previous processing messages. This will create new rows for missing threads and update existing ones based on their OO Link. This can take a very long time and spam the channels. Are you sure you want to continue? Type `YES` to confirm.");
+
+    const filter = m => m.author.id === message.author.id && m.content.toUpperCase() === 'YES';
+    try {
+        await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ['time'] });
+    } catch (e) {
+        return confirmation.edit("Confirmation timed out. Reprocessing cancelled.");
+    }
+    
+    await confirmation.edit(`Confirmed. Starting FORCE REPROCESSING for threads created on or after ${dateString}. Please be patient.`);
+
+    try {
+        const startDate = new Date(dateString);
+        const startTimestamp = startDate.getTime();
+
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+            return message.channel.send("Error: Could not find the configured text channel.");
+        }
+
+        // Usamos el método de escaneo profundo para asegurar que encontramos todos los hilos en orden
+        let allThreads = [];
+        let lastMessageId = null;
+        let fetchMore = true;
+        while(fetchMore) {
+            const options = { limit: 100 };
+            if (lastMessageId) options.before = lastMessageId;
+            const messages = await parentChannel.messages.fetch(options);
+            if (messages.size === 0) { fetchMore = false; break; }
+            for (const msg of messages.values()) {
+                if (msg.createdTimestamp < startTimestamp) { fetchMore = false; break; }
+                if (msg.thread) allThreads.push(msg.thread);
+            }
+            if(fetchMore) lastMessageId = messages.lastKey();
+        }
+
+        if (allThreads.length === 0) {
+            return message.channel.send("No threads found to re-process after the specified date.");
+        }
+        
+        allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+        
+        await message.channel.send(`Found **${allThreads.length}** threads to force-reprocess. This will take approximately ${((allThreads.length * (DELAY_BETWEEN_TICKET_PROCESSING_MS + 2000)) / 60000).toFixed(1)} minutes.`);
+
+        for (let i = 0; i < allThreads.length; i++) {
+            const thread = allThreads[i];
+            const progress = `(${i + 1}/${allThreads.length})`;
+            
+            try {
+                // --- LA MAGIA ESTÁ AQUÍ ---
+                // Llamamos a processThread, pero el truco es que processThread ahora
+                // ya no tiene la lógica para saltarse hilos procesados.
+                // Le pasamos un "initiator" especial para los logs.
+                const fetchedThread = await client.channels.fetch(thread.id);
+                console.log(`[Force Reprocess] ${progress} Processing thread: ${fetchedThread.name}`);
+                
+                // No enviamos mensaje al canal para no spamear
+                // await message.channel.send(`> ${progress} Reprocessing: **${fetchedThread.name}**`);
+                
+                await processThread(fetchedThread, "Forced Reprocess by Admin");
+                
+                // La pausa es crucial
+                await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS));
+
+            } catch (err) {
+                 console.warn(`[Force Reprocess] ${progress} Failed to re-process thread ${thread.name}. Error: ${err.message}`);
+            }
+        }
+        
+        await message.channel.send("✅ **Force reprocessing complete!** The Google Sheet should now be corrected.");
+
+    } catch (error) {
+        console.error("[Force Reprocess] Major error during forced reprocessing:", error);
+        await message.channel.send("A critical error occurred during the forced reprocessing. Check the logs.");
     }
   } else if (commandName === "archiveallthreads") {
     // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
