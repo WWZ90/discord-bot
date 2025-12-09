@@ -1307,19 +1307,17 @@ async function processThread(
       const lowerContent = msg.content.toLowerCase();
 
       if (
-        initiatedByDisplayName === "Automatic Scan" &&
         lowerContent.startsWith("flag:") &&
         msg.author.id !== client.user.id
       ) {
         console.log(
           `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`
         );
-        return { success: false, reason: "manual_flag_found_on_scan" };
+        return { success: false, reason: "manual_flag_found_on_scan", status: 'flagged' };
       }
 
       if (
-        lowerContent.startsWith("thread data for") &&
-        initiatedByDisplayName === "Automatic Scan"
+        lowerContent.startsWith("thread data for")
       ) {
         console.log(
           `${logPrefix} Found previous processing summary. Aborting.`
@@ -1377,7 +1375,7 @@ async function processThread(
               `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`
             );
           }
-          return { success: false, reason: "no_closing_message_bonk_found" };
+          return { success: false, reason: "no_closing_message_bonk_found", status: 'flagged' };
         }
 
         console.log(`${logPrefix} No manual CLOSING. Attempting auto-closing.`);
@@ -1520,7 +1518,7 @@ async function processThread(
       if (botConfig.errorNotificationUserID)
         flagMessage += ` <@${botConfig.errorNotificationUserID}>`;
       await threadChannel.send(flagMessage);
-      return { success: false, reason: "oo_link_not_found_and_flagged" };
+      return { success: false, reason: "oo_link_not_found_and_flagged", status: 'flagged' };
     }
 
     if (validationErrorMessages.length > 0) {
@@ -1534,7 +1532,7 @@ async function processThread(
         errReply += ` <@${botConfig.errorNotificationUserID}>`;
       errReply += "\n\nPlease correct and re-run `!recordt`.";
       await threadChannel.send(errReply);
-      return { success: false, reason: "validation_error_in_closing_block" };
+      return { success: false, reason: "validation_error_in_closing_block", status: 'flagged' };
     }
 
     const rowData = {
@@ -1599,7 +1597,7 @@ async function processThread(
           }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
       }
       await threadChannel.send(resp);
-      return { success: true, action: result.action };
+      return { success: true, action: result.action, status: 'processed' };
     } else {
       console.error(
         `${logPrefix} Failed to save/update sheet. Message: ${
@@ -1612,7 +1610,8 @@ async function processThread(
       await threadChannel.send(errSave);
       return {
         success: false,
-        reason: result.reason || result.action || "sheets_upsert_error",
+        reason: result.reason || result.action || "sheets_upsert_error", 
+        status: 'flagged'
       };
     }
   } catch (error) {
@@ -1629,21 +1628,8 @@ async function processThread(
       );
     }
 
-    return { success: false, reason: "unknown_error" };
-  } finally {
-    if (threadChannel && threadChannel.archivable && !threadChannel.archived) {
-      try {
-        await threadChannel.setArchived(true);
-        console.log(
-          `${logPrefix} Thread successfully archived after processing.`
-        );
-      } catch (archiveError) {
-        console.error(
-          `${logPrefix} Failed to archive thread after processing: ${archiveError.message}`
-        );
-      }
-    }
-  }
+    return { success: false, reason: "unknown_error", status: 'flagged' };
+  } 
 }
 
 async function performMassScan() {
@@ -2040,10 +2026,13 @@ client.on("messageCreate", async (message) => {
 
       let processedCount = 0;
       let failedCount = 0;
+      let flaggedCount = 0;
 
       for (let i = 0; i < allThreads.length; i++) {
         const thread = allThreads[i];
         const progress = `(${i + 1}/${allThreads.length})`;
+
+        let shouldArchive = true;
 
         try {
           const fetchedThread = await client.channels.fetch(thread.id).catch(() => null);
@@ -2066,14 +2055,21 @@ client.on("messageCreate", async (message) => {
           if (!isProcessed) {
             processedCount++;
             console.log(`[Backlog] ${progress} Processing thread: ${fetchedThread.name}`);
-            await processThread(fetchedThread, "Manual Backlog Process");
+
+            const processingResult = await processThread(fetchedThread, "Manual Backlog Process");
+
+            if (processingResult && processingResult.status === 'flagged') {
+                shouldArchive = false;
+                flaggedCount++;
+                console.log(`[Backlog] ${progress} Thread ${fetchedThread.name} was flagged for manual review. Leaving it active.`);
+            }
 
             await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS)); 
           } else {
             console.log(`[Backlog] ${progress} Skipping already processed thread: ${fetchedThread.name}`);
           }
           
-          if (!fetchedThread.archived) {
+          if (shouldArchive && !fetchedThread.archived) {
               await fetchedThread.setArchived(true, "Backlog processing cleanup");
           }
 
