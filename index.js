@@ -2098,9 +2098,9 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "forcereprocess") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return message.reply("!! DANGER !! Admin permission required for this destructive command.");
-    }
+    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    //     return message.reply("!! DANGER !! Admin permission required for this destructive command.");
+    // }
     
     const dateString = args[0];
     if (!dateString || !/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
@@ -2167,12 +2167,23 @@ client.on("messageCreate", async (message) => {
                 // await message.channel.send(`> ${progress} Reprocessing: **${fetchedThread.name}**`);
                 
                 await processThread(fetchedThread, "Forced Reprocess by Admin");
+
+                if (fetchedThread && !fetchedThread.archived) {
+                    await fetchedThread.setArchived(true, "Forced re-process cleanup");
+                }
                 
                 // La pausa es crucial
                 await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS));
 
             } catch (err) {
                  console.warn(`[Force Reprocess] ${progress} Failed to re-process thread ${thread.name}. Error: ${err.message}`);
+                 // Intentar archivar incluso si falla
+                 try {
+                     const errorThread = await client.channels.fetch(thread.id).catch(() => null);
+                     if (errorThread && !errorThread.archived) {
+                         await errorThread.setArchived(true, "Archiving after error");
+                     }
+                 } catch (archiveErr) { /* Ignorar */ }
             }
         }
         
