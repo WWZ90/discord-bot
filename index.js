@@ -83,6 +83,7 @@ const VERIFIER_ID_MAP = {
   "187029075485917184": "Pingu",
   "845581203628490762": "tenadome",
   "996906539199758389": "Elliot",
+  "720305732712529931": "Cosmic",
 };
 
 const KNOWN_VERIFIER_BOT_IDS = Object.keys(VERIFIER_ID_MAP);
@@ -912,11 +913,19 @@ async function processTicketChannel(
           if (msg.author.bot && !KNOWN_VERIFIER_BOT_IDS.includes(msg.author.id))
             continue;
 
-          const verifierName = VERIFIER_ID_MAP[msg.author.id];
-          if (verifierName && !foundVerifierIds.has(msg.author.id)) {
-            foundVerifiers.push(verifierName);
-            foundVerifierIds.add(msg.author.id);
+          if (foundVerifierIds.has(msg.author.id)) continue; 
+
+          let verifierName = VERIFIER_ID_MAP[msg.author.id];
+          if (!verifierName) {
+              // No está en el mapa, usamos el displayName como fallback
+              const member = msg.member || await channel.guild.members.fetch(msg.author.id).catch(() => null);
+              verifierName = member?.displayName ?? msg.author.displayName;
+              console.log(`${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`);
           }
+
+          foundVerifiers.push(verifierName);
+          foundVerifierIds.add(msg.author.id);
+
           if (foundVerifiers.length >= 3) break;
         }
 
@@ -1392,11 +1401,20 @@ async function processThread(
           if (msg.author.bot && !KNOWN_VERIFIER_BOT_IDS.includes(msg.author.id))
             continue;
 
-          const verifierName = VERIFIER_ID_MAP[msg.author.id];
-          if (verifierName && !foundVerifierIds.has(msg.author.id)) {
-            foundVerifiers.push(verifierName);
-            foundVerifierIds.add(msg.author.id);
+          if (foundVerifierIds.has(msg.author.id)) continue; // Evitar duplicados
+
+          // --- CORRECCIÓN CLAVE: Lógica de Fallback ---
+          let verifierName = VERIFIER_ID_MAP[msg.author.id];
+          if (!verifierName) {
+              // No está en el mapa, usamos el displayName como fallback
+              const member = msg.member || await threadChannel.guild.members.fetch(msg.author.id).catch(() => null);
+              verifierName = member?.displayName ?? msg.author.displayName;
+              console.log(`${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`);
           }
+
+          foundVerifiers.push(verifierName);
+          foundVerifierIds.add(msg.author.id);
+
           if (foundVerifiers.length >= 3) break;
         }
 
