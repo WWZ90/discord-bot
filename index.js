@@ -26,6 +26,9 @@ const TICKET_TOOL_USER_ID = process.env.TICKET_TOOL_USER_ID;
 const OO_LIVE_FEED_CHANNEL_ID = process.env.OO_LIVE_FEED_CHANNEL_ID;
 const FAILED_TICKETS_FORUM_ID = process.env.FAILED_TICKETS_FORUM_ID;
 
+const OTB_VERIFICATIONS_CHANNEL_ID = process.env.OTB_VERIFICATIONS_CHANNEL_ID;
+const OTB_BOT_USER_ID = process.env.OTB_BOT_USER_ID;
+
 const VERIFIER_ID_MAP = {
   // --- Bots ---
   "1168799488819859506": "Thatcryptogal",
@@ -1886,6 +1889,61 @@ client.on("messageCreate", async (message) => {
               - Index found: ${eventIndexMatch?.[1] ? "Yes" : "No"}
               - Title match found: ${titleMatch?.[1] ? "Yes" : "No"}`);
       }
+    }
+    return;
+  }
+
+  if (message.channel.id === OTB_VERIFICATIONS_CHANNEL_ID && message.author.id === OTB_BOT_USER_ID) {
+    const logPrefix = `[Supervisor][OTBV2]`;
+    console.log(`${logPrefix} Detected a new message from OTB Bot.`);
+
+    const messageContent = message.content;
+    let uniqueId = null;
+
+    const ooLink = findValidLinkIn(messageContent);
+    if (ooLink) {
+        const txHashMatch = ooLink.match(/transactionHash=([^&]+)/);
+        const eventIndexMatch = ooLink.match(/eventIndex=(\d+)/);
+        if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+            uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+        }
+    }
+
+    if (!uniqueId) {
+        console.log(`${logPrefix} Primary link search failed. Attempting aggressive regex search...`);
+        const txHashMatch = messageContent.match(/transactionHash=?(0x[a-fA-F0-9]{64})/);
+        const eventIndexMatch = messageContent.match(/eventIndex=(\d+)/);
+        if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+            uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+            console.log(`${logPrefix} Aggressive search successful. Found Unique ID: ${uniqueId}`);
+        }
+    }
+
+    if (uniqueId) {
+        const indexToRemove = fallbackQueue.findIndex(item => item.uniqueId === uniqueId);
+        if (indexToRemove > -1) {
+            const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+            console.log(`${logPrefix} SUCCESS (by Unique ID): Removed "${removedItem.title}" from fallback queue.`);
+        } else {
+            console.log(`${logPrefix} INFO: OTBV2 handled a proposal (ID: ${uniqueId}) that was not in the pending queue.`);
+        }
+    } else {
+        console.log(`${logPrefix} WARNING: Could not extract Unique ID. Attempting to match by market title...`);
+      
+        const titleMatch = messageContent.match(/q:\s*title:\s*([^,]+)/);
+        if (titleMatch?.[1]) {
+            const marketTitle = titleMatch[1].trim();
+            const indexToRemove = fallbackQueue.findIndex(item => item.title.trim() === marketTitle);
+
+            if (indexToRemove > -1) {
+                const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+                console.log(`${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallback queue as a safety measure.`);
+            } else {
+                console.log(`${logPrefix} FAILED: Could not find a matching title in the fallback queue for "${marketTitle}".`);
+            }
+        } else {
+            console.log(`${logPrefix} FAILED: Could not extract market title from the message either. Manual review may be needed if a thread is created.`);
+        }
     }
     return;
   }
