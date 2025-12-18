@@ -94,7 +94,7 @@ const KNOWN_VERIFIER_BOT_IDS = Object.keys(VERIFIER_ID_MAP);
 let lastTicketToolActivityTimestamp = Date.now();
 const FALLBACK_QUEUE_PROCESS_INTERVAL_MS = 60 * 1000;
 const TICKET_TOOL_INACTIVITY_THRESHOLD_MS = 2 * 60 * 1000;
-const MIN_AGE_FOR_FALLBACK_CHECK_MS = 20 * 60 * 1000;
+const MIN_AGE_FOR_FALLBACK_CHECK_MS = 25 * 60 * 1000;
 
 const fallbackQueue = [];
 const channelsToRecheck = new Set();
