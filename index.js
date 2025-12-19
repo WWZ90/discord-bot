@@ -2753,24 +2753,39 @@ async function processFallbackQueue() {
         }
 
         console.log(`[Supervisor] Attempting to create fallback thread for "${item.title}"...`);
-        const starterMessage = await targetChannel.send(
-          `This ticket did not create after 20 mins ${item.messageLink}`
-        );
+
+        const threadName = `This ticket did not create after 25 mins`;
+
+        const starterMessageContent = `${item.title} ${item.messageLink}`;
+
+        const starterMessage = await targetChannel.send(starterMessageContent);
 
         await starterMessage.startThread({
-          name: item.title,
+          name: threadName,
         });
 
         console.log(`[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`);
         createdFallbackThreads.set(item.uniqueId, Date.now());
         console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
       
-      } catch (error) {
+      }  catch (error) {
         console.error(`[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`, error.message);
 
-        console.log(`[Supervisor] Thread limit reached! Triggering an emergency archive routine...`);
-        await message.channel.send("⚠️ Thread limit reached. Running an emergency cleanup. The threads will be created shortly."); 
-        await autoArchiveInactiveThreads();
+        const errorMessage = error.message.toLowerCase();
+        if (errorMessage.includes('maximum number of threads') || errorMessage.includes('maximum number of active threads')) {
+            console.log(`[Supervisor] Thread limit reached! Triggering an emergency archive routine...`);
+            
+            try {
+                const logChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+                if (logChannel) {
+                    await logChannel.send("⚠️ Thread limit reached. Running an emergency cleanup. Failed threads will be re-queued.");
+                }
+            } catch (logErr) {
+                console.error("[Supervisor] Could not send emergency log message.", logErr);
+            }
+            
+            await autoArchiveInactiveThreads();
+        }
         
         console.log(`[Supervisor] Re-queuing item "${item.title}" for a later attempt.`);
         fallbackQueue.push(item);
