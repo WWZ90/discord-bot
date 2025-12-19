@@ -1221,7 +1221,7 @@ async function processThread(
     typeColumn = capitalizeFirstLetter(blockTypes[0]),
     closerUser = "",
     disputedColumn = "";
-  const proposalNameForSheet = threadChannel.name;
+  
   const recorderUser = initiatedByDisplayName;
   const findoorUsers = new Set();
   const bonkersInMessageText = [];
@@ -1233,7 +1233,21 @@ async function processThread(
   };
   let validationErrorMessages = [];
 
-  const orderColumnValue = threadChannel.name;
+  const starterMessage = await threadChannel.fetchStarterMessage().catch(() => null);
+  let proposalNameForSheet = threadChannel.name; // Fallback
+
+  if (starterMessage && starterMessage.content) {
+      const linkPosition = starterMessage.content.lastIndexOf('https://discord.com/channels/');
+      if (linkPosition !== -1) {
+          proposalNameForSheet = starterMessage.content.substring(0, linkPosition).trim();
+      } else {
+          proposalNameForSheet = starterMessage.content.trim();
+      }
+  }
+  console.log(`${logPrefix} Identified Proposal Name for Sheet: "${proposalNameForSheet}"`);
+
+  const orderColumnValue = proposalNameForSheet;
+
   console.log(`${logPrefix} Order Column Value: #${orderColumnValue}`);
 
   if (threadChannel.createdTimestamp) {
@@ -1246,21 +1260,16 @@ async function processThread(
   }
 
   try {
-    const starterMessage = await threadChannel
-      .fetchStarterMessage()
-      .catch((err) => {
-        console.error(`${logPrefix} Could not fetch starter message:`, err);
-        return null;
-      });
-
-    ooLink = findValidLinkIn(starterMessage.content);
-    if (!ooLink && starterMessage.embeds.length > 0) {
-      for (const embed of starterMessage.embeds) {
-        let foundLink =
-          findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
-        if (foundLink) {
-          ooLink = foundLink;
-          break;
+    if (starterMessage) {
+      ooLink = findValidLinkIn(starterMessage.content);
+      if (!ooLink && starterMessage.embeds.length > 0) {
+        for (const embed of starterMessage.embeds) {
+          let foundLink =
+            findValidLinkIn(embed.url) || findValidLinkIn(embed.description);
+          if (foundLink) {
+            ooLink = foundLink;
+            break;
+          }
         }
       }
     }
@@ -2008,9 +2017,9 @@ client.on("messageCreate", async (message) => {
       recordType
     );
   } else if (commandName === "processthreads") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("Admin permission required to run this command.");
-    // }
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
 
     const dateString = args[0];
     const timeString = args[1]; 
@@ -2180,9 +2189,9 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "forcereprocess") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("!! DANGER !! Admin permission required for this destructive command.");
-    // }
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
     
     const dateString = args[0];
     const timeString = args[1]; // Nuevo parámetro para la hora
@@ -2280,9 +2289,9 @@ client.on("messageCreate", async (message) => {
         await message.channel.send("A critical error occurred during the forced reprocessing. Check the logs.");
     }
   } else if (commandName === "archiveallthreads") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("Admin permission required to run this command.");
-    // }
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
 
     const dateString = args[0];
     const timeString = args[1];
@@ -2375,10 +2384,78 @@ client.on("messageCreate", async (message) => {
         "A critical error occurred during the mass archival process. Check the logs."
       );
     }
+  } else if (commandName === "unarchive") {
+    // --- RESTRICCIÓN DE ACCESO ---
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
+
+    const dateString = args[0];
+    const timeString = args[1];
+
+    if (!dateString) {
+        return message.reply("Please provide a start date. \n**Format:** `!unarchive YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!unarchive 2023-12-19 14:00`");
+    }
+
+    let startTimestamp;
+    try {
+        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
+        const startDate = new Date(fullDateTimeString);
+        if (isNaN(startDate.getTime())) { throw new Error("Invalid date"); }
+        startTimestamp = startDate.getTime();
+    } catch (e) {
+        return message.reply("Invalid date/time format.");
+    }
+    
+    const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
+    await message.reply(`Searching for archived threads created since **${feedbackDate}** to unarchive. Please wait...`);
+
+    try {
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+            return message.channel.send("Error: Could not find the configured text channel.");
+        }
+
+        const archivedThreadsCollection = await parentChannel.threads.fetchArchived({fetchAll: true});
+        
+        const threadsToUnarchive = Array.from(archivedThreadsCollection.threads.values())
+            .filter(t => t.createdTimestamp >= startTimestamp);
+
+        if (threadsToUnarchive.length === 0) {
+            return message.channel.send(`No archived threads found matching the criteria since ${feedbackDate}.`);
+        }
+
+        await message.channel.send(`Found **${threadsToUnarchive.length}** archived threads to restore. Starting now...`);
+
+        let unarchivedCount = 0;
+        for (let i = 0; i < threadsToUnarchive.length; i++) {
+            const thread = threadsToUnarchive[i];
+            const progress = `(${i + 1}/${threadsToUnarchive.length})`;
+
+            try {
+                if (thread.archived) {
+                    await thread.setArchived(false);
+                    unarchivedCount++;
+                    console.log(`[Unarchive] ${progress} Successfully unarchived thread: ${thread.name}`);
+                }
+            } catch (err) {
+                console.warn(`[Unarchive] ${progress} Failed to unarchive thread ${thread.name}. Error: ${err.message}`);
+            }
+            // Pausa para no saturar la API
+            await new Promise(r => setTimeout(r, 1000));
+        }
+        
+        await message.channel.send(`✅ Unarchive process complete! Successfully restored **${unarchivedCount}** threads.`);
+
+    } catch (error) {
+        console.error("[Unarchive] Major error during unarchive command:", error);
+        await message.channel.send("A critical error occurred during the unarchive process. Check the logs.");
+    }
   } else if (commandName === "findduplicates") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("Admin permission required to run this command.");
-    // }
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
+    
     await message.reply(
       "🔍 Starting scan for duplicate tickets... This may take a moment as I'm checking both sheets."
     );
@@ -2452,9 +2529,10 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "fixduplicates") {
-    // if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-    //     return message.reply("Admin permission required to run this command.");
-    // }
+    if (message.author.id !== '907390293316337724') {
+        return message.reply("⛔ This command is restricted to the bot owner.");
+    }
+
     if (args[0] !== "confirm") {
       return message.reply(
         "This is a destructive action. To proceed, run the command again with `confirm`.\n**Example:** `!fixduplicates confirm`"
