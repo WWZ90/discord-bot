@@ -2008,7 +2008,27 @@ client.on("messageCreate", async (message) => {
     if (blockTypes.includes(subCommand)) {
       recordType = subCommand;
     }
-    await message.reply(
+
+    let actualThreadName = message.channel.name;
+    try {
+        const starterMessage = await message.channel.fetchStarterMessage();
+        if (starterMessage && starterMessage.content) {
+            const linkPosition = starterMessage.content.lastIndexOf('https://discord.com/channels/');
+            if (linkPosition !== -1) {
+                actualThreadName = starterMessage.content.substring(0, linkPosition).trim();
+            }
+        }
+    } catch (e) {
+        console.error(`[recordt] Could not fetch starter message to get real name for thread ${message.channel.id}`);
+    }
+
+    const displayName = actualThreadName;
+
+    const processingMessage = await message.reply(
+      `Processing thread "${displayName}" as ${recordType}...`
+    );
+
+    const result = await message.reply(
       `Processing thread ${message.channel.name} as ${recordType}...`
     );
     await processThread(
@@ -2016,6 +2036,18 @@ client.on("messageCreate", async (message) => {
       message.member.displayName,
       recordType
     );
+
+    if (result) { 
+        if (result.success) {
+        } else {
+            if (result.reason === 'already_processed') {
+                await processingMessage.edit(`ℹ️ This thread has already been processed.`);
+            } else if (result.reason === 'manual_flag_found') {
+                await processingMessage.edit(`⛔ Processing stopped: A manual flag was found in this thread.`);
+            } else {
+            }
+        }
+    }
   } else if (commandName === "processthreads") {
     if (message.author.id !== '907390293316337724') {
         return message.reply("⛔ This command is restricted to the bot owner.");
@@ -2455,7 +2487,7 @@ client.on("messageCreate", async (message) => {
     if (message.author.id !== '907390293316337724') {
         return message.reply("⛔ This command is restricted to the bot owner.");
     }
-    
+
     await message.reply(
       "🔍 Starting scan for duplicate tickets... This may take a moment as I'm checking both sheets."
     );
