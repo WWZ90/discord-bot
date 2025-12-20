@@ -101,7 +101,9 @@ const channelsToRecheck = new Set();
 let isProcessingFallbackQueue = false;
 
 const createdFallbackThreads = new Map();
-const FALLBACK_RECORD_EXPIRATION_MS = 4 * 60 * 60 * 1000; // 4 hours
+const FALLBACK_RECORD_EXPIRATION_MS = 2 * 60 * 60 * 1000; 
+const OTB_CACHE_EXPIRATION_MS = 60 * 60 * 1000;
+const otbVerifiedCache = new Map();
 
 const pendingTicketTimers = new Map();
 
@@ -119,7 +121,7 @@ const TICKET_TOOL_DELETE_COMMAND_TEXT =
   process.env.TICKET_TOOL_DELETE_COMMAND || "$delete";
 
 const DEFAULT_MIN_TICKET_AGE_MS = 2 * 60 * 60 * 1000 + 5 * 60 * 1000;
-const DEFAULT_PROCESSING_INTERVAL_MS = 30 * 60 * 1000;
+const DEFAULT_PROCESSING_INTERVAL_MS = 5 * 60 * 1000;
 const DELAY_BETWEEN_TICKET_PROCESSING_MS =
   parseInt(process.env.DELAY_BETWEEN_TICKETS_MS, 10) || 10000;
 
@@ -1834,6 +1836,8 @@ function scheduleNextScan() {
 
 client.on("messageCreate", async (message) => {
   if (message.channel.id === OO_LIVE_FEED_CHANNEL_ID && message.author.bot) {
+    const logPrefix = `[Supervisor][oo-live-feed]`;
+
     let marketLink = null;
     let fullTextContent = message.content;
 
@@ -1868,32 +1872,53 @@ client.on("messageCreate", async (message) => {
         const eventIndex = eventIndexMatch[1];
 
         const uniqueId = `${transactionHash}-${eventIndex}`;
-
         const marketTitle = titleMatch[1].trim();
+
+        let alreadyVerifiedByOTB = false;
+
+        if (otbVerifiedCache.has(uniqueId)) {
+            alreadyVerifiedByOTB = true;
+            otbVerifiedCache.delete(uniqueId); 
+        } 
+
+        else {
+             for (const [key, item] of otbVerifiedCache.entries()) {
+                 if (item.title === marketTitle && !item.uniqueId) {
+                     alreadyVerifiedByOTB = true;
+                     otbVerifiedCache.delete(key);
+                     break;
+                 }
+             }
+        }
+        
+        if (alreadyVerifiedByOTB) {
+            console.log(`${logPrefix} Ignoring market "${marketTitle}" as it was already handled by OTBV2.`);
+            return; 
+        }
 
         const existingItem = fallbackQueue.find(
           (item) => item.uniqueId === uniqueId
         );
         if (existingItem) {
           console.log(
-            `[Supervisor] Item with ID ${uniqueId} already in queue. Ignoring.`
+            `${logPrefix} Item with ID ${uniqueId} already in queue. Ignoring.`
           );
           return;
         }
 
         console.log(
-          `[Supervisor] Detected new market in oo-feed-live. Adding "${marketTitle}" with ID "${uniqueId}" to fallback queue.`
+          `${logPrefix} Detected new market. Adding "${marketTitle}" with ID "${uniqueId}" to fallback queue.`
         );
 
-        // --- MODIFICACIÓN CLAVE: NO MÁS setTimeout ---
         fallbackQueue.push({
           uniqueId: uniqueId,
           messageLink: message.url,
           title: marketTitle,
-          timestamp: Date.now(), // Guardamos cuándo llegó
+          timestamp: Date.now(),
         });
+
       } else {
-        console.log(`[Supervisor] Could not extract full data.
+        console.log(`${logPrefix} Could not extract full data.
               - Hash found: ${transactionHashMatch?.[1] ? "Yes" : "No"}
               - Index found: ${eventIndexMatch?.[1] ? "Yes" : "No"}
               - Title match found: ${titleMatch?.[1] ? "Yes" : "No"}`);
@@ -1908,6 +1933,7 @@ client.on("messageCreate", async (message) => {
 
     const messageContent = message.content;
     let uniqueId = null;
+    let marketTitle = null;
 
     const ooLink = findValidLinkIn(messageContent);
     if (ooLink) {
@@ -1917,41 +1943,48 @@ client.on("messageCreate", async (message) => {
             uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
         }
     }
-
     if (!uniqueId) {
-        console.log(`${logPrefix} Primary link search failed. Attempting aggressive regex search...`);
         const txHashMatch = messageContent.match(/transactionHash=?(0x[a-fA-F0-9]{64})/);
         const eventIndexMatch = messageContent.match(/eventIndex=(\d+)/);
         if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
             uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
-            console.log(`${logPrefix} Aggressive search successful. Found Unique ID: ${uniqueId}`);
         }
     }
+    
+    const titleMatch = messageContent.match(/q:\s*title:\s*([^,]+)/);
+    if (titleMatch?.[1]) {
+        marketTitle = titleMatch[1].trim();
+    }
 
+    let foundInQueue = false;
     if (uniqueId) {
         const indexToRemove = fallbackQueue.findIndex(item => item.uniqueId === uniqueId);
         if (indexToRemove > -1) {
             const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-            console.log(`${logPrefix} SUCCESS (by Unique ID): Removed "${removedItem.title}" from fallback queue.`);
-        } else {
-            console.log(`${logPrefix} INFO: OTBV2 handled a proposal (ID: ${uniqueId}) that was not in the pending queue.`);
+            console.log(`${logPrefix} SUCCESS (by ID): Removed "${removedItem.title}" from fallbackQueue.`);
+            foundInQueue = true;
         }
-    } else {
-        console.log(`${logPrefix} WARNING: Could not extract Unique ID. Attempting to match by market title...`);
-      
-        const titleMatch = messageContent.match(/q:\s*title:\s*([^,]+)/);
-        if (titleMatch?.[1]) {
-            const marketTitle = titleMatch[1].trim();
-            const indexToRemove = fallbackQueue.findIndex(item => item.title.trim() === marketTitle);
+    }
+    if (!foundInQueue && marketTitle) {
+        const indexToRemove = fallbackQueue.findIndex(item => item.title === marketTitle);
+        if (indexToRemove > -1) {
+            const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+            console.log(`${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallbackQueue.`);
+            foundInQueue = true;
+        }
+    }
 
-            if (indexToRemove > -1) {
-                const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-                console.log(`${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallback queue as a safety measure.`);
-            } else {
-                console.log(`${logPrefix} FAILED: Could not find a matching title in the fallback queue for "${marketTitle}".`);
-            }
+    if (!foundInQueue) {
+        if (uniqueId || marketTitle) {
+            console.log(`${logPrefix} Item not in fallbackQueue. Adding to OTB cache.`);
+            const cacheKey = uniqueId || marketTitle;
+            otbVerifiedCache.set(cacheKey, {
+                uniqueId: uniqueId,
+                title: marketTitle,
+                timestamp: Date.now()
+            });
         } else {
-            console.log(`${logPrefix} FAILED: Could not extract market title from the message either. Manual review may be needed if a thread is created.`);
+             console.log(`${logPrefix} FAILED: Could not extract any identifier (ID or Title) from the OTB message.`);
         }
     }
     return;
@@ -2761,6 +2794,22 @@ async function processFallbackQueue() {
     if (cleanedCount > 0) {
       console.log(
         `[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`
+      );
+    }
+  }
+
+  if (otbVerifiedCache.size > 0) {
+    const now = Date.now();
+    let cleanedCount = 0;
+    for (const [key, item] of otbVerifiedCache.entries()) {
+      if (now - item.timestamp > OTB_CACHE_EXPIRATION_MS) {
+        otbVerifiedCache.delete(key);
+        cleanedCount++;
+      }
+    }
+    if (cleanedCount > 0) {
+      console.log(
+        `[Supervisor] Cleaned up ${cleanedCount} expired OTB cache record(s).`
       );
     }
   }
