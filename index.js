@@ -1917,6 +1917,8 @@ client.on("messageCreate", async (message) => {
           timestamp: Date.now(),
         });
 
+        console.log(`[Supervisor] Fallback queue size is now: ${fallbackQueue.length}`);
+
       } else {
         console.log(`${logPrefix} Could not extract full data.
               - Hash found: ${transactionHashMatch?.[1] ? "Yes" : "No"}
@@ -1962,6 +1964,7 @@ client.on("messageCreate", async (message) => {
         if (indexToRemove > -1) {
             const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
             console.log(`${logPrefix} SUCCESS (by ID): Removed "${removedItem.title}" from fallbackQueue.`);
+            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
             foundInQueue = true;
         }
     }
@@ -1970,13 +1973,16 @@ client.on("messageCreate", async (message) => {
         if (indexToRemove > -1) {
             const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
             console.log(`${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallbackQueue.`);
+            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
             foundInQueue = true;
         }
     }
 
     if (!foundInQueue) {
         if (uniqueId || marketTitle) {
-            console.log(`${logPrefix} Item not in fallbackQueue. Adding to OTB cache.`);
+            const identifier = marketTitle ? `Market "${marketTitle}"` : `Market with ID "${uniqueId}"`;
+            console.log(`${logPrefix} ${identifier} not in fallbackQueue. Adding to OTB cache.`);
+           
             const cacheKey = uniqueId || marketTitle;
             otbVerifiedCache.set(cacheKey, {
                 uniqueId: uniqueId,
@@ -2743,6 +2749,7 @@ client.on("channelCreate", async (channel) => {
             console.log(
               `${logPrefix} SUCCESS: Removed "${removedItem.title}" (ID: ${uniqueId}) from fallback queue.`
             );
+            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
             return;
           }
 
@@ -2926,6 +2933,8 @@ async function processFallbackQueue() {
         console.log(`[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`);
         createdFallbackThreads.set(item.uniqueId, Date.now());
         console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
+
+        console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
       
       }  catch (error) {
         console.error(`[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`, error.message);
@@ -2954,6 +2963,8 @@ async function processFallbackQueue() {
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
     }
+
+    console.log(`[Supervisor] Fallback queue processing finished. ${fallbackQueue.length} items remaining in queue.`);
 
     isProcessingFallbackQueue = false;
     console.log("[Supervisor] Finished processing fallback queue.");
