@@ -34,31 +34,25 @@ const VERIFIER_ID_MAP = {
   "1168799488819859506": "Thatcryptogal",
   "1315158450023436419": "Brooks",
   "1306255447921266708": "Moon",
-  "1168003949173936229": "Manuel",
   "1166775345786126458": "Kurapika",
   "1166811542927454238": "Bonded",
   "1251472380732244111": "Mperry",
-  "1167997659483742278": "Shara",
   "1440048299888480329": "Henry",
   "1166811112105324635": "Obito",
-  "1170573707220099192": "aenews",
-  "1293989820456108163": "Kiara",
-  "1166914386691096626": "Elliot",
+  "1440057036363661495": "SolaX",
   "1440048398421201086": "Williamson",
 
   // --- Verifiers ---
   "1192038652428156930": "Williamson",
   "1087299154629365780": "Henry",
   "740634549070856243": "Kurapika",
-  "897927615992701010": "Manuel",
   "1465243309852201093": "Mperry",
   "948633228741320764": "Obito",
   "693794367395332196": "RuneManny",
   "1089240716988919990": "Cha",
   "920460678580547665": "Anglo",
-  "927149128440508457": "SolaX",
-  "1125576177101312000": "Kiara",
-  "631768876597641228": "Brooks",
+  "927149128440508457": "SolaX", 
+  "1194602153210282107": "Coffee",
   "1348003493713023117": "crzu",
   "424567831657709594": "Lonfus",
   "975111115858124850": "Ace",
@@ -292,6 +286,7 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
   return responseMessage;
 }
 
+/*
 function parseClosingBlock(lines) {
   const bonkersList = [];
   const bonkedUsersData = {
@@ -337,6 +332,66 @@ function parseClosingBlock(lines) {
   return {
     bonkersList,
     bonkedUsersData,
+    manualLink,
+    manualType,
+    alertoorUser,
+    manualFindoor,
+  };
+}
+*/
+
+function parseClosingBlock(lines) {
+  const bonkersList = [];
+  const allBonkedUsers = new Set();
+  
+  let manualLink = null;
+  let manualType = null;
+  let alertoorUser = null;
+  let manualFindoor = null;
+
+  const bonkPattern = /^(.*?)\s+bonked\s+(.*)$/i;
+
+  for (const line of lines) {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
+
+    const lowerCaseLine = trimmedLine.toLowerCase();
+
+    if (lowerCaseLine.includes("bonked")) {
+        const bonkMatch = trimmedLine.match(bonkPattern);
+
+        if (bonkMatch) {
+            const bonker = capitalizeFirstLetter(bonkMatch[1].trim());
+            const victimsRaw = bonkMatch[2].trim();
+            const victims = victimsRaw.split(',').map(v => capitalizeFirstLetter(v.trim())).filter(Boolean);
+
+            for (const victim of victims) {
+                bonkersList.push(bonker);
+                allBonkedUsers.add(victim);
+            }
+            continue;
+        }
+    }
+    
+    if (lowerCaseLine.startsWith("link:")) {
+      manualLink = trimmedLine.substring(5).trim();
+    } else if (lowerCaseLine.startsWith("type:")) {
+      manualType = trimmedLine.substring(5).trim();
+    } else if (lowerCaseLine.startsWith("alertoor:")) {
+      alertoorUser = capitalizeFirstLetter(trimmedLine.substring(9).trim());
+    } else if (lowerCaseLine.startsWith("findoor:")) {
+      manualFindoor = capitalizeFirstLetter(trimmedLine.substring(8).trim());
+    }
+  }
+
+  return {
+    bonkersList,
+    bonkedUsersData: { 
+        primary: allBonkedUsers, 
+        secondary: new Set(),
+        tertiary: new Set(),
+        btertiary: new Set(),
+    },
     manualLink,
     manualType,
     alertoorUser,
