@@ -11,7 +11,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 
 if (!BOT_ID || !DISCORD_TOKEN) {
   console.error(
-    "Error: BOT_ID or DISCORD_TOKEN is missing in .env for deploy-commands.js."
+    "Error: BOT_ID or DISCORD_TOKEN is missing in .env for deploy-commands.js.",
   );
   process.exit(1);
 }
@@ -24,16 +24,16 @@ const configCommand = new SlashCommandBuilder()
     subcommand
       .setName("set_processing_interval")
       .setDescription(
-        "Set how often tickets are processed (e.g., 30m, 1h, 2h30m)."
+        "Set how often tickets are processed (e.g., 30m, 1h, 2h30m).",
       )
       .addStringOption((option) =>
         option
           .setName("interval")
           .setDescription(
-            "Processing interval (e.g., '30m', '1h', '90m'). Min 1 minute."
+            "Processing interval (e.g., '30m', '1h', '90m'). Min 1 minute.",
           )
-          .setRequired(true)
-      )
+          .setRequired(true),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -47,9 +47,9 @@ const configCommand = new SlashCommandBuilder()
           .addChoices(
             { name: "Do nothing", value: "none" },
             { name: "Close Ticket ($close)", value: "close" },
-            { name: "Delete Ticket ($delete)", value: "delete" }
-          )
-      )
+            { name: "Delete Ticket ($delete)", value: "delete" },
+          ),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -59,39 +59,50 @@ const configCommand = new SlashCommandBuilder()
         option
           .setName("enabled")
           .setDescription("Set to true to enable, false to disable.")
-          .setRequired(true)
-      )
+          .setRequired(true),
+      ),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName("toggle_paid_column")
+      .setDescription("Enable or disable automatic Paid? column with N.")
+      .addBooleanOption((option) =>
+        option
+          .setName("enabled")
+          .setDescription("Set to true to enable, false to disable.")
+          .setRequired(true),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("set_min_ticket_age")
       .setDescription(
-        "Set min ticket age for auto-processing (e.g., 30m, 2h5m, 1d)."
+        "Set min ticket age for auto-processing (e.g., 30m, 2h5m, 1d).",
       )
       .addStringOption((option) =>
         option
           .setName("age")
           .setDescription("Minimum age (e.g., 30m,  2h5m, 125m, 1d).")
-          .setRequired(true)
-      )
+          .setRequired(true),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("set_error_user")
       .setDescription(
-        "Set the user to ping when an error occurs during processing."
+        "Set the user to ping when an error occurs during processing.",
       )
       .addUserOption((option) =>
         option
           .setName("user")
           .setDescription("The user to notify on errors.")
-          .setRequired(true)
-      )
+          .setRequired(true),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("view_settings")
-      .setDescription("View the current bot configuration for this server.")
+      .setDescription("View the current bot configuration for this server."),
   );
 
 const scanStatusCommand = new SlashCommandBuilder()
@@ -111,80 +122,92 @@ const statsCommand = new SlashCommandBuilder()
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
-          .setRequired(false)
+          .setRequired(false),
       )
       .addIntegerOption((option) =>
         option
           .setName("end_order")
           .setDescription("Optional: The order # to end counting at.")
-          .setRequired(false)
-      )
+          .setRequired(false),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("primary")
-      .setDescription("Counts how many tickets each user has participated in as Primary.")
+      .setDescription(
+        "Counts how many tickets each user has participated in as Primary.",
+      )
       .addIntegerOption((option) =>
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
-          .setRequired(false)
+          .setRequired(false),
       )
       .addIntegerOption((option) =>
         option
           .setName("end_order")
           .setDescription("Optional: The order # to end counting at.")
-          .setRequired(false)
-      )
+          .setRequired(false),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("secondary")
-      .setDescription("Counts how many tickets each user has participated in as Secondary.")
+      .setDescription(
+        "Counts how many tickets each user has participated in as Secondary.",
+      )
       .addIntegerOption((option) =>
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
-          .setRequired(false)
+          .setRequired(false),
       )
-      .addIntegerOption((option) => 
+      .addIntegerOption((option) =>
         option
           .setName("end_order")
           .setDescription("Optional: The order # to end counting at.")
-          .setRequired(false)
-      )
+          .setRequired(false),
+      ),
   )
   .addSubcommand((subcommand) =>
     subcommand
       .setName("tertiary")
-      .setDescription("Counts how many tickets each user has participated in as Tertiary.")
+      .setDescription(
+        "Counts how many tickets each user has participated in as Tertiary.",
+      )
       .addIntegerOption((option) =>
         option
           .setName("start_order")
           .setDescription("Optional: The order # to start counting from.")
-          .setRequired(false)
+          .setRequired(false),
       )
       .addIntegerOption((option) =>
         option
           .setName("end_order")
           .setDescription("Optional: The order # to end counting at.")
-          .setRequired(false)
-      )
+          .setRequired(false),
+      ),
   )
-  .addSubcommand((subcommand) => 
+  .addSubcommand((subcommand) =>
     subcommand
       .setName("pending_tickets_queue")
-      .setDescription("Shows the current queue of fallback threads waiting to be created.")
+      .setDescription(
+        "Shows the current queue of fallback threads waiting to be created.",
+      ),
   );
 
-const commands = [configCommand.toJSON(), scanStatusCommand.toJSON(), statsCommand.toJSON()];
+const commands = [
+  configCommand.toJSON(),
+  scanStatusCommand.toJSON(),
+  statsCommand.toJSON(),
+];
 
 const rest = new REST({ version: "10" }).setToken(DISCORD_TOKEN);
 
 (async () => {
   try {
     console.log(
-      `Started refreshing ${commands.length} application (/) commands.`
+      `Started refreshing ${commands.length} application (/) commands.`,
     );
 
     if (GUILD_ID) {

@@ -51,7 +51,7 @@ const VERIFIER_ID_MAP = {
   "693794367395332196": "RuneManny",
   "1089240716988919990": "Cha",
   "920460678580547665": "Anglo",
-  "927149128440508457": "SolaX", 
+  "927149128440508457": "SolaX",
   "1194602153210282107": "Coffee",
   "1348003493713023117": "crzu",
   "424567831657709594": "Lonfus",
@@ -95,7 +95,7 @@ const channelsToRecheck = new Set();
 let isProcessingFallbackQueue = false;
 
 const createdFallbackThreads = new Map();
-const FALLBACK_RECORD_EXPIRATION_MS = 2 * 60 * 60 * 1000; 
+const FALLBACK_RECORD_EXPIRATION_MS = 2 * 60 * 60 * 1000;
 const OTB_CACHE_EXPIRATION_MS = 60 * 60 * 1000;
 const otbVerifiedCache = new Map();
 
@@ -124,6 +124,7 @@ let botConfig = {
   autoProcessingEnabled:
     (process.env.ENABLE_AUTO_PROCESSING || "true").toLowerCase() === "true",
   currentPostProcessingAction: process.env.DEFAULT_TICKET_POST_ACTION || "none",
+  autoSetPaidToN: false,
   minTicketAgeForProcessing: DEFAULT_MIN_TICKET_AGE_MS,
   processingIntervalMs: DEFAULT_PROCESSING_INTERVAL_MS,
   errorNotificationUserID: process.env.DEFAULT_ERROR_USER_ID || null,
@@ -137,7 +138,7 @@ let scanTimeoutId = null;
 const blockTypes = ["polymarket", "snapshot", "disputed", "assertion"];
 
 const LINK_REGEX = new RegExp(
-  /(https:\/\/(?:oracle\.uma\.xyz|snapshot\.org|snapshot\.xyz)\/[^\s<>()'"]+)/
+  /(https:\/\/(?:oracle\.uma\.xyz|snapshot\.org|snapshot\.xyz)\/[^\s<>()'"]+)/,
 );
 
 function findValidLinkIn(text) {
@@ -231,7 +232,7 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
   const sheet = masterDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
   if (!sheet) {
     throw new Error(
-      `Worksheet "${WORKSHEET_TITLE_MAIN}" not found in the master sheet.`
+      `Worksheet "${WORKSHEET_TITLE_MAIN}" not found in the master sheet.`,
     );
   }
 
@@ -270,7 +271,7 @@ async function getStatsForColumn(columnName, startOrder, endOrder) {
   }
 
   let responseMessage = `**${capitalizeFirstLetter(
-    columnName
+    columnName,
   )} Stats ${rangeText}**\n\`\`\`\n`;
   for (const [name, count] of sortedData) {
     responseMessage += `${name.padEnd(20, " ")}: ${count}\n`;
@@ -343,7 +344,7 @@ function parseClosingBlock(lines) {
 function parseClosingBlock(lines) {
   const bonkersList = [];
   const allBonkedUsers = new Set();
-  
+
   let manualLink = null;
   let manualType = null;
   let alertoorUser = null;
@@ -358,21 +359,24 @@ function parseClosingBlock(lines) {
     const lowerCaseLine = trimmedLine.toLowerCase();
 
     if (lowerCaseLine.includes("bonked")) {
-        const bonkMatch = trimmedLine.match(bonkPattern);
+      const bonkMatch = trimmedLine.match(bonkPattern);
 
-        if (bonkMatch) {
-            const bonker = capitalizeFirstLetter(bonkMatch[1].trim());
-            const victimsRaw = bonkMatch[2].trim();
-            const victims = victimsRaw.split(',').map(v => capitalizeFirstLetter(v.trim())).filter(Boolean);
+      if (bonkMatch) {
+        const bonker = capitalizeFirstLetter(bonkMatch[1].trim());
+        const victimsRaw = bonkMatch[2].trim();
+        const victims = victimsRaw
+          .split(",")
+          .map((v) => capitalizeFirstLetter(v.trim()))
+          .filter(Boolean);
 
-            for (const victim of victims) {
-                bonkersList.push(bonker);
-                allBonkedUsers.add(victim);
-            }
-            continue;
+        for (const victim of victims) {
+          bonkersList.push(bonker);
+          allBonkedUsers.add(victim);
         }
+        continue;
+      }
     }
-    
+
     if (lowerCaseLine.startsWith("link:")) {
       manualLink = trimmedLine.substring(5).trim();
     } else if (lowerCaseLine.startsWith("type:")) {
@@ -386,11 +390,11 @@ function parseClosingBlock(lines) {
 
   return {
     bonkersList,
-    bonkedUsersData: { 
-        primary: allBonkedUsers, 
-        secondary: new Set(),
-        tertiary: new Set(),
-        btertiary: new Set(),
+    bonkedUsersData: {
+      primary: allBonkedUsers,
+      secondary: new Set(),
+      tertiary: new Set(),
+      btertiary: new Set(),
     },
     manualLink,
     manualType,
@@ -422,7 +426,7 @@ async function loadConfig() {
         !validator(loadedConfig[key])
       ) {
         console.warn(
-          `Invalid value for ${key} in config: "${loadedConfig[key]}". Using default.`
+          `Invalid value for ${key} in config: "${loadedConfig[key]}". Using default.`,
         );
         botConfig[key] = defaultValue;
         changedDuringLoad = true;
@@ -431,33 +435,33 @@ async function loadConfig() {
     applyOrDefault(
       "autoProcessingEnabled",
       (process.env.ENABLE_AUTO_PROCESSING || "true").toLowerCase() === "true",
-      (val) => typeof val === "boolean"
+      (val) => typeof val === "boolean",
     );
     applyOrDefault(
       "currentPostProcessingAction",
       process.env.DEFAULT_TICKET_POST_ACTION || "none",
       (val) =>
-        typeof val === "string" && ["none", "close", "delete"].includes(val)
+        typeof val === "string" && ["none", "close", "delete"].includes(val),
     );
     applyOrDefault(
       "minTicketAgeForProcessing",
       DEFAULT_MIN_TICKET_AGE_MS,
-      (val) => typeof val === "number" && val > 0
+      (val) => typeof val === "number" && val > 0,
     );
     applyOrDefault(
       "processingIntervalMs",
       DEFAULT_PROCESSING_INTERVAL_MS,
-      (val) => typeof val === "number" && val > 0
+      (val) => typeof val === "number" && val > 0,
     );
     applyOrDefault(
       "errorNotificationUserID",
       process.env.DEFAULT_ERROR_USER_ID || null,
-      (val) => typeof val === "string" || val === null
+      (val) => typeof val === "string" || val === null,
     );
     applyOrDefault(
       "lastSuccessfulScanTimestamp",
       0,
-      (val) => typeof val === "number"
+      (val) => typeof val === "number",
     );
 
     if (loadedConfig.scanInterval !== undefined) changedDuringLoad = true;
@@ -465,20 +469,20 @@ async function loadConfig() {
     console.log("Configuration loaded from bot_config.json.");
     if (changedDuringLoad) {
       console.log(
-        "Defaults applied or legacy keys found. Saving updated config."
+        "Defaults applied or legacy keys found. Saving updated config.",
       );
       await saveConfig(false);
     }
   } catch (error) {
     if (error.code === "ENOENT") {
       console.log(
-        "bot_config.json not found. Initializing with defaults and creating file."
+        "bot_config.json not found. Initializing with defaults and creating file.",
       );
       await saveConfig(false);
     } else {
       console.error(
         "Error loading bot_config.json. Using hardcoded/env defaults.",
-        error
+        error,
       );
       botConfig = {
         autoProcessingEnabled:
@@ -501,6 +505,7 @@ async function saveConfig(logFullObject = true) {
       autoProcessingEnabled: botConfig.autoProcessingEnabled,
       currentPostProcessingAction: botConfig.currentPostProcessingAction,
       minTicketAgeForProcessing: botConfig.minTicketAgeForProcessing,
+      autoSetPaidToN: botConfig.autoSetPaidToN,
       processingIntervalMs: botConfig.processingIntervalMs,
       errorNotificationUserID: botConfig.errorNotificationUserID,
       lastSuccessfulScanTimestamp: botConfig.lastSuccessfulScanTimestamp,
@@ -508,7 +513,7 @@ async function saveConfig(logFullObject = true) {
     await fs.writeFile(
       CONFIG_FILE_PATH,
       JSON.stringify(configToSave, null, 2),
-      "utf8"
+      "utf8",
     );
     if (logFullObject)
       console.log("Configuration saved to bot_config.json:", configToSave);
@@ -533,7 +538,7 @@ if (GOOGLE_SERVICE_ACCOUNT_EMAIL && GOOGLE_PRIVATE_KEY && GOOGLE_SHEET_ID) {
   }
 } else {
   console.warn(
-    "Warning: Core Google Sheets environment variables are missing."
+    "Warning: Core Google Sheets environment variables are missing.",
   );
 }
 
@@ -548,12 +553,12 @@ const client = new Client({
 
 async function upsertRowByOrderValue(
   orderValueToFind,
-  dataWithOrderAndProposal
+  dataWithOrderAndProposal,
 ) {
   const logPrefix = `[Order #${orderValueToFind}]`;
   if (!googleDoc) {
     console.error(
-      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`
+      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`,
     );
     return {
       success: false,
@@ -566,7 +571,7 @@ async function upsertRowByOrderValue(
     const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
     if (!sheet) {
       console.error(
-        `${logPrefix} Error: Worksheet "${WORKSHEET_TITLE_MAIN}" not found.`
+        `${logPrefix} Error: Worksheet "${WORKSHEET_TITLE_MAIN}" not found.`,
       );
       return {
         success: false,
@@ -577,7 +582,7 @@ async function upsertRowByOrderValue(
     await sheet.loadHeaderRow();
     if (!sheet.headerValues.includes(ORDER_COLUMN_HEADER)) {
       console.error(
-        `${logPrefix} Error: Order Column "${ORDER_COLUMN_HEADER}" not in sheet.`
+        `${logPrefix} Error: Order Column "${ORDER_COLUMN_HEADER}" not in sheet.`,
       );
       return {
         success: false,
@@ -630,7 +635,7 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
   const logPrefix = `[Thread: ${ooLinkKey}]`;
   if (!googleDoc) {
     console.error(
-      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`
+      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`,
     );
     return {
       success: false,
@@ -643,7 +648,7 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
     const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_FINDOOR];
     if (!sheet) {
       console.error(
-        `${logPrefix} Error: Worksheet "${WORKSHEET_TITLE_FINDOOR}" not found.`
+        `${logPrefix} Error: Worksheet "${WORKSHEET_TITLE_FINDOOR}" not found.`,
       );
       return {
         success: false,
@@ -655,8 +660,14 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
 
     const keyColumnHeader = "OO Link";
     if (!sheet.headerValues.includes(keyColumnHeader)) {
-      console.error(`${logPrefix} Error: Key Column "${keyColumnHeader}" not in sheet. Cannot upsert by OO Link.`);
-      return { success: false, action: "none", message: `Key Column "${keyColumnHeader}" not found.` };
+      console.error(
+        `${logPrefix} Error: Key Column "${keyColumnHeader}" not in sheet. Cannot upsert by OO Link.`,
+      );
+      return {
+        success: false,
+        action: "none",
+        message: `Key Column "${keyColumnHeader}" not found.`,
+      };
     }
 
     const rows = await sheet.getRows();
@@ -664,7 +675,10 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
 
     for (let i = 0; i < rows.length; i++) {
       const cellOoLinkValue = rows[i].get(keyColumnHeader);
-      if (cellOoLinkValue && cellOoLinkValue.toString().trim() === ooLinkKey.trim()) {
+      if (
+        cellOoLinkValue &&
+        cellOoLinkValue.toString().trim() === ooLinkKey.trim()
+      ) {
         targetRow = rows[i];
         break;
       }
@@ -691,7 +705,7 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
       return { success: true, action: "updated" };
     } else {
       console.log(
-        `${logPrefix} No row found for OO Link "${ooLinkKey}". Adding new row...`
+        `${logPrefix} No row found for OO Link "${ooLinkKey}". Adding new row...`,
       );
       await sheet.addRow(dataForSheet);
       console.log(`${logPrefix} New row added.`);
@@ -709,66 +723,86 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
 }
 
 async function autoArchiveInactiveThreads() {
-    const logPrefix = "[Auto-Archive]";
-    console.log(`${logPrefix} Starting routine to archive inactive threads...`);
+  const logPrefix = "[Auto-Archive]";
+  console.log(`${logPrefix} Starting routine to archive inactive threads...`);
 
-    try {
-        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
-            console.log(`${logPrefix} Could not find the configured text channel. Aborting.`);
-            return;
-        }
-
-        const activeThreads = await parentChannel.threads.fetchActive();
-        if (activeThreads.threads.size === 0) {
-            console.log(`${logPrefix} No active threads found to check. Routine finished.`);
-            return;
-        }
-
-        const archiveThresholdMs = 24 * 60 * 60 * 1000; 
-        const now = Date.now();
-        let archivedCount = 0;
-
-        for (const thread of activeThreads.threads.values()) {
-
-            const lastMessages = await thread.messages.fetch({ limit: 1 }).catch(() => null);
-            
-            const lastActivityTimestamp = lastMessages?.first()?.createdTimestamp || thread.createdTimestamp;
-            const inactivityDuration = now - lastActivityTimestamp;
-
-            if (inactivityDuration > archiveThresholdMs) {
-                try {
-                    if (!thread.archived) {
-                        await thread.setArchived(true, 'Automatic cleanup of inactive thread');
-                        console.log(`${logPrefix} Successfully archived inactive thread: ${thread.name}`);
-                        archivedCount++;
-                        await new Promise(r => setTimeout(r, 1000));
-                    }
-                } catch (err) {
-                    console.error(`${logPrefix} Failed to archive thread ${thread.name}. Error:`, err.message);
-                }
-            }
-        }
-
-        if (archivedCount > 0) {
-            console.log(`${logPrefix} Routine finished. Archived ${archivedCount} inactive thread(s).`);
-        } else {
-            console.log(`${logPrefix} Routine finished. No threads met the inactivity criteria for archiving.`);
-        }
-
-    } catch (error) {
-        console.error(`${logPrefix} A critical error occurred during the auto-archive routine:`, error);
+  try {
+    const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
+    if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+      console.log(
+        `${logPrefix} Could not find the configured text channel. Aborting.`,
+      );
+      return;
     }
+
+    const activeThreads = await parentChannel.threads.fetchActive();
+    if (activeThreads.threads.size === 0) {
+      console.log(
+        `${logPrefix} No active threads found to check. Routine finished.`,
+      );
+      return;
+    }
+
+    const archiveThresholdMs = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+    let archivedCount = 0;
+
+    for (const thread of activeThreads.threads.values()) {
+      const lastMessages = await thread.messages
+        .fetch({ limit: 1 })
+        .catch(() => null);
+
+      const lastActivityTimestamp =
+        lastMessages?.first()?.createdTimestamp || thread.createdTimestamp;
+      const inactivityDuration = now - lastActivityTimestamp;
+
+      if (inactivityDuration > archiveThresholdMs) {
+        try {
+          if (!thread.archived) {
+            await thread.setArchived(
+              true,
+              "Automatic cleanup of inactive thread",
+            );
+            console.log(
+              `${logPrefix} Successfully archived inactive thread: ${thread.name}`,
+            );
+            archivedCount++;
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+        } catch (err) {
+          console.error(
+            `${logPrefix} Failed to archive thread ${thread.name}. Error:`,
+            err.message,
+          );
+        }
+      }
+    }
+
+    if (archivedCount > 0) {
+      console.log(
+        `${logPrefix} Routine finished. Archived ${archivedCount} inactive thread(s).`,
+      );
+    } else {
+      console.log(
+        `${logPrefix} Routine finished. No threads met the inactivity criteria for archiving.`,
+      );
+    }
+  } catch (error) {
+    console.error(
+      `${logPrefix} A critical error occurred during the auto-archive routine:`,
+      error,
+    );
+  }
 }
 
 async function processTicketChannel(
   channel,
   initiatedBy = "Automatic Scan",
-  recordType = "standard"
+  recordType = "standard",
 ) {
   const logPrefix = `[${channel.id} | ${channel.name}]`;
   console.log(
-    `${logPrefix} Starting processing. Initiated by: ${initiatedBy}, Type: ${recordType}`
+    `${logPrefix} Starting processing. Initiated by: ${initiatedBy}, Type: ${recordType}`,
   );
   let proposalNumber = "",
     typeColumn = capitalizeFirstLetter(blockTypes[0]), //By default Polymarket
@@ -799,13 +833,13 @@ async function processTicketChannel(
       : "";
   if (!proposalNumber) {
     console.log(
-      `${logPrefix} Could not extract numeric ID from "${channel.name}". Skipping.`
+      `${logPrefix} Could not extract numeric ID from "${channel.name}". Skipping.`,
     );
     return { success: false, reason: "invalid_proposal_id_format" };
   }
   const orderColumnValue = proposalNumber;
   console.log(
-    `${logPrefix} Normalized Proposal Number: ${proposalNumber} (Order #${orderColumnValue})`
+    `${logPrefix} Normalized Proposal Number: ${proposalNumber} (Order #${orderColumnValue})`,
   );
 
   try {
@@ -824,7 +858,7 @@ async function processTicketChannel(
         msg.author.id !== client.user.id
       ) {
         console.log(
-          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`
+          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`,
         );
         return { success: false, reason: "manual_flag_found_on_scan" };
       }
@@ -836,7 +870,7 @@ async function processTicketChannel(
           TICKET_TOOL_DELETE_COMMAND_TEXT
         ) {
           console.log(
-            `${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`
+            `${logPrefix} Found own processing summary, but channel still exists. Re-sending delete command.`,
           );
           try {
             await channel.send(TICKET_TOOL_DELETE_COMMAND_TEXT);
@@ -847,7 +881,7 @@ async function processTicketChannel(
         }
         if (initiatedBy === "Automatic Scan") {
           console.log(
-            `${logPrefix} Found previous processing summary. Aborting.`
+            `${logPrefix} Found previous processing summary. Aborting.`,
           );
           return { success: false, reason: "already_processed" };
         }
@@ -926,7 +960,7 @@ async function processTicketChannel(
         if (bonkFound) {
           if (!botFlagFound) {
             console.log(
-              `${logPrefix} 'Bonk' found and no manual CLOSING message. Flagging for manual review.`
+              `${logPrefix} 'Bonk' found and no manual CLOSING message. Flagging for manual review.`,
             );
             let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
             if (botConfig.errorNotificationUserID)
@@ -934,27 +968,27 @@ async function processTicketChannel(
             await channel.send(flagMsg);
           } else {
             console.log(
-              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`
+              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`,
             );
           }
           return { success: false, reason: "no_closing_message_bonk_found" };
         }
 
         console.log(
-          `${logPrefix} No manual CLOSING found and no blockers. Attempting auto-closing.`
+          `${logPrefix} No manual CLOSING found and no blockers. Attempting auto-closing.`,
         );
 
         const allMessages = Array.from(
-          allMessagesCollection.values()
+          allMessagesCollection.values(),
         ).reverse(); // Chronological order
 
         const ticketToolMessageIndex = allMessages.findIndex(
-          (m) => m.author.id === TICKET_TOOL_USER_ID && m.embeds.length > 0
+          (m) => m.author.id === TICKET_TOOL_USER_ID && m.embeds.length > 0,
         );
 
         if (ticketToolMessageIndex === -1) {
           console.log(
-            `${logPrefix} Auto-closing failed: Cannot find Ticket Tool message. Flagging.`
+            `${logPrefix} Auto-closing failed: Cannot find Ticket Tool message. Flagging.`,
           );
           let flagMsg = `Flag: Auto-closing failed. Cannot find Ticket Tool message. Manual review needed.`;
           if (botConfig.errorNotificationUserID)
@@ -964,7 +998,7 @@ async function processTicketChannel(
         }
 
         const messagesAfterTicketTool = allMessages.slice(
-          ticketToolMessageIndex + 1
+          ticketToolMessageIndex + 1,
         );
         const foundVerifiers = [];
         const foundVerifierIds = new Set();
@@ -973,14 +1007,20 @@ async function processTicketChannel(
           if (msg.author.bot && !KNOWN_VERIFIER_BOT_IDS.includes(msg.author.id))
             continue;
 
-          if (foundVerifierIds.has(msg.author.id)) continue; 
+          if (foundVerifierIds.has(msg.author.id)) continue;
 
           let verifierName = VERIFIER_ID_MAP[msg.author.id];
           if (!verifierName) {
-              // No está en el mapa, usamos el displayName como fallback
-              const member = msg.member || await channel.guild.members.fetch(msg.author.id).catch(() => null);
-              verifierName = member?.displayName ?? msg.author.displayName;
-              console.log(`${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`);
+            // No está en el mapa, usamos el displayName como fallback
+            const member =
+              msg.member ||
+              (await channel.guild.members
+                .fetch(msg.author.id)
+                .catch(() => null));
+            verifierName = member?.displayName ?? msg.author.displayName;
+            console.log(
+              `${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`,
+            );
           }
 
           foundVerifiers.push(verifierName);
@@ -992,12 +1032,12 @@ async function processTicketChannel(
         console.log(
           `${logPrefix} Auto-closing found ${
             foundVerifiers.length
-          } verifiers: ${foundVerifiers.join(", ")}`
+          } verifiers: ${foundVerifiers.join(", ")}`,
         );
 
         let closingContent = "";
         const isDisputed = allMessages.some((m) =>
-          m.content.toLowerCase().includes("disputed")
+          m.content.toLowerCase().includes("disputed"),
         );
 
         if (isDisputed && foundVerifiers.length === 0) {
@@ -1029,12 +1069,12 @@ async function processTicketChannel(
         if (!member && !autoClosingGenerated) {
           try {
             member = await closingMessage.guild.members.fetch(
-              closingMessage.author.id
+              closingMessage.author.id,
             );
           } catch (fetchError) {
             console.error(
               `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
-              fetchError
+              fetchError,
             );
           }
         }
@@ -1044,7 +1084,7 @@ async function processTicketChannel(
           VERIFIER_ID_MAP[closerId] ||
           (member?.displayName ?? closingMessage.author.displayName);
         console.log(
-          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`
+          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`,
         );
 
         const lines = closingMessage.content.split("\n");
@@ -1066,7 +1106,7 @@ async function processTicketChannel(
             : [];
           if (users.length > 3 && !autoClosingGenerated) {
             validationErrorMessages.push(
-              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${users.length}.`
+              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${users.length}.`,
             );
           }
           primaryUser = users[0] || "";
@@ -1107,11 +1147,11 @@ async function processTicketChannel(
     if (validationErrorMessages.length > 0) {
       console.error(
         `${logPrefix} Validation errors in CLOSING: ${validationErrorMessages.join(
-          "; "
-        )}.`
+          "; ",
+        )}.`,
       );
       let errReply = `Error(s) in CLOSING block (data not saved):\n- ${validationErrorMessages.join(
-        "\n- "
+        "\n- ",
       )}`;
       if (botConfig.errorNotificationUserID)
         errReply += ` <@${botConfig.errorNotificationUserID}>`;
@@ -1161,7 +1201,7 @@ async function processTicketChannel(
       "bonker 9": bonkersInMessageText[8] || "",
       "bonker 10": bonkersInMessageText[9] || "",
       "bonker 11": bonkersInMessageText.slice(10).join(", ") || "",
-      "Paid?": "",
+      "Paid?": botConfig.autoSetPaidToN ? "N" : "",
       "BONKED 1": Array.from(bonkedUsersData.primary).join(", ") || "",
       "BONKED 2": Array.from(bonkedUsersData.secondary).join(", ") || "",
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
@@ -1197,13 +1237,9 @@ async function processTicketChannel(
           }\n` +
           `**Closer:** ${closerUser || "-"}, **Recorder:** ${recorderUser}\n` +
           `**Bonkers:** ${bonkersInMessageText.join(", ") || "None"}\n` +
-          `**BONKED P/S/T/BT:** P:[${
+          `**BONKED:** P:[${
             Array.from(bonkedUsersData.primary).join(", ") || "N"
-          }] S:[${
-            Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${
-            Array.from(bonkedUsersData.tertiary).join(", ") || "N"
-          }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
+          }]`;
       }
       await channel.send(resp);
       if (botConfig.currentPostProcessingAction !== "none") {
@@ -1219,12 +1255,12 @@ async function processTicketChannel(
           } catch (e) {
             console.error(`${logPrefix} Err sending post-processing cmd:`, e);
             await channel.send(
-              "Saved, but failed to send post-processing cmd."
+              "Saved, but failed to send post-processing cmd.",
             );
           }
         } else
           console.log(
-            `${logPrefix} No post-processing cmd configured for action: ${botConfig.currentPostProcessingAction}.`
+            `${logPrefix} No post-processing cmd configured for action: ${botConfig.currentPostProcessingAction}.`,
           );
       }
       return { success: true, action: result.action };
@@ -1232,7 +1268,7 @@ async function processTicketChannel(
       console.error(
         `${logPrefix} Failed to save/update sheet. Message: ${
           result.message || "Unknown"
-        }`
+        }`,
       );
       let errSave =
         result.action === "not_found" &&
@@ -1240,8 +1276,8 @@ async function processTicketChannel(
         result.message.includes("Order Column")
           ? `Flag: ${result.message}`
           : result.action === "not_found"
-          ? `Flag: Row for Order #${orderColumnValue} not found. Data NOT added.`
-          : `Error: Issue saving/updating sheet for Order #${orderColumnValue}.`;
+            ? `Flag: Row for Order #${orderColumnValue} not found. Data NOT added.`
+            : `Error: Issue saving/updating sheet for Order #${orderColumnValue}.`;
       if (botConfig.errorNotificationUserID)
         errSave += ` <@${botConfig.errorNotificationUserID}>`;
       await channel.send(errSave);
@@ -1263,11 +1299,11 @@ async function processTicketChannel(
 async function processThread(
   threadChannel,
   initiatedByDisplayName,
-  recordType = "standard"
+  recordType = "standard",
 ) {
   const logPrefix = `[Thread: ${threadChannel.name} (${threadChannel.id})]`;
   console.log(
-    `${logPrefix} Starting processing. Initiated by: ${initiatedByDisplayName}, Type: ${recordType}`
+    `${logPrefix} Starting processing. Initiated by: ${initiatedByDisplayName}, Type: ${recordType}`,
   );
 
   let date = "",
@@ -1278,7 +1314,7 @@ async function processThread(
     typeColumn = capitalizeFirstLetter(blockTypes[0]),
     closerUser = "",
     disputedColumn = "";
-  
+
   const recorderUser = initiatedByDisplayName;
   const findoorUsers = new Set();
   const bonkersInMessageText = [];
@@ -1290,18 +1326,26 @@ async function processThread(
   };
   let validationErrorMessages = [];
 
-  const starterMessage = await threadChannel.fetchStarterMessage().catch(() => null);
+  const starterMessage = await threadChannel
+    .fetchStarterMessage()
+    .catch(() => null);
   let proposalNameForSheet = threadChannel.name; // Fallback
 
   if (starterMessage && starterMessage.content) {
-      const linkPosition = starterMessage.content.lastIndexOf('https://discord.com/channels/');
-      if (linkPosition !== -1) {
-          proposalNameForSheet = starterMessage.content.substring(0, linkPosition).trim();
-      } else {
-          proposalNameForSheet = starterMessage.content.trim();
-      }
+    const linkPosition = starterMessage.content.lastIndexOf(
+      "https://discord.com/channels/",
+    );
+    if (linkPosition !== -1) {
+      proposalNameForSheet = starterMessage.content
+        .substring(0, linkPosition)
+        .trim();
+    } else {
+      proposalNameForSheet = starterMessage.content.trim();
+    }
   }
-  console.log(`${logPrefix} Identified Proposal Name for Sheet: "${proposalNameForSheet}"`);
+  console.log(
+    `${logPrefix} Identified Proposal Name for Sheet: "${proposalNameForSheet}"`,
+  );
 
   const orderColumnValue = proposalNameForSheet;
 
@@ -1333,16 +1377,15 @@ async function processThread(
 
     if (!ooLink) {
       const referenceLinkMatch = starterMessage.content.match(
-        /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/
+        /https:\/\/discord\.com\/channels\/\d+\/(\d+)\/(\d+)/,
       );
       if (referenceLinkMatch) {
         const [, linkedChannelId, linkedMessageId] = referenceLinkMatch;
         try {
           const linkedChannel = await client.channels.fetch(linkedChannelId);
           if (linkedChannel && linkedChannel.isTextBased()) {
-            const feedMessage = await linkedChannel.messages.fetch(
-              linkedMessageId
-            );
+            const feedMessage =
+              await linkedChannel.messages.fetch(linkedMessageId);
             let foundLinkInReferenced = findValidLinkIn(feedMessage.content);
             if (!foundLinkInReferenced && feedMessage.embeds.length > 0) {
               for (const embed of feedMessage.embeds) {
@@ -1362,7 +1405,7 @@ async function processThread(
         } catch (err) {
           console.error(
             `${logPrefix} Error fetching referenced message for link:`,
-            err
+            err,
           );
         }
       }
@@ -1384,12 +1427,19 @@ async function processThread(
         msg.author.id !== client.user.id
       ) {
         console.log(
-          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`
+          `${logPrefix} Found manual "Flag:" during automatic scan. Aborting.`,
         );
-        return { success: false, reason: "manual_flag_found_on_scan", status: 'flagged' };
+        return {
+          success: false,
+          reason: "manual_flag_found_on_scan",
+          status: "flagged",
+        };
       }
 
-      if (lowerContent.startsWith("thread data for") && initiatedByDisplayName !== "Forced Reprocess by Admin") {
+      if (
+        lowerContent.startsWith("thread data for") &&
+        initiatedByDisplayName !== "Forced Reprocess by Admin"
+      ) {
         return { success: false, reason: "already_processed" };
       }
 
@@ -1412,7 +1462,9 @@ async function processThread(
       if (/\bbonk\b/.test(lowerContent)) {
         bonkFound = true;
         // --- LOG DE DEPURACIÓN (mantenlo por si acaso) ---
-        console.log(`[DEBUG - BONK DETECTED] Thread: ${threadChannel.name} | Message ID: ${msg.id} | Author: ${msg.author.tag} | Content: "${msg.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
+        console.log(
+          `[DEBUG - BONK DETECTED] Thread: ${threadChannel.name} | Message ID: ${msg.id} | Author: ${msg.author.tag} | Content: "${msg.content.substring(0, 100).replace(/\n/g, " ")}..."`,
+        );
       }
 
       if (!manualClosingMessage && lowerContent.startsWith("closing:")) {
@@ -1443,7 +1495,7 @@ async function processThread(
         if (bonkFound) {
           if (!botFlagFound) {
             console.log(
-              `${logPrefix} 'Bonk' found and no manual CLOSING. Flagging.`
+              `${logPrefix} 'Bonk' found and no manual CLOSING. Flagging.`,
             );
             let flagMsg = `Flag: "CLOSING:" message not found. Manual review needed.`;
             if (botConfig.errorNotificationUserID)
@@ -1451,16 +1503,20 @@ async function processThread(
             await threadChannel.send(flagMsg);
           } else {
             console.log(
-              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`
+              `${logPrefix} 'Bonk' found, no CLOSING, but bot flag already exists. Skipping.`,
             );
           }
-          return { success: false, reason: "no_closing_message_bonk_found", status: 'flagged' };
+          return {
+            success: false,
+            reason: "no_closing_message_bonk_found",
+            status: "flagged",
+          };
         }
 
         console.log(`${logPrefix} No manual CLOSING. Attempting auto-closing.`);
 
         const allMessages = Array.from(
-          threadMessagesCollection.values()
+          threadMessagesCollection.values(),
         ).reverse(); // Chronological
 
         const foundVerifiers = [];
@@ -1475,10 +1531,16 @@ async function processThread(
           // --- CORRECCIÓN CLAVE: Lógica de Fallback ---
           let verifierName = VERIFIER_ID_MAP[msg.author.id];
           if (!verifierName) {
-              // No está en el mapa, usamos el displayName como fallback
-              const member = msg.member || await threadChannel.guild.members.fetch(msg.author.id).catch(() => null);
-              verifierName = member?.displayName ?? msg.author.displayName;
-              console.log(`${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`);
+            // No está en el mapa, usamos el displayName como fallback
+            const member =
+              msg.member ||
+              (await threadChannel.guild.members
+                .fetch(msg.author.id)
+                .catch(() => null));
+            verifierName = member?.displayName ?? msg.author.displayName;
+            console.log(
+              `${logPrefix} Verifier ID ${msg.author.id} not in map. Using fallback name: ${verifierName}`,
+            );
           }
 
           foundVerifiers.push(verifierName);
@@ -1490,12 +1552,12 @@ async function processThread(
         console.log(
           `${logPrefix} Auto-closing found ${
             foundVerifiers.length
-          } verifiers: ${foundVerifiers.join(", ")}`
+          } verifiers: ${foundVerifiers.join(", ")}`,
         );
 
         let closingContent = "";
         const isDisputed = allMessages.some((m) =>
-          m.content.toLowerCase().includes("disputed")
+          m.content.toLowerCase().includes("disputed"),
         );
 
         if (isDisputed && foundVerifiers.length === 0) {
@@ -1526,12 +1588,12 @@ async function processThread(
         if (!member && !autoClosingGenerated) {
           try {
             member = await closingMessage.guild.members.fetch(
-              closingMessage.author.id
+              closingMessage.author.id,
             );
           } catch (fetchError) {
             console.error(
               `${logPrefix} Could not fetch member for user ${closingMessage.author.id}.`,
-              fetchError
+              fetchError,
             );
           }
         }
@@ -1541,7 +1603,7 @@ async function processThread(
           VERIFIER_ID_MAP[closerId] ||
           (member?.displayName ?? closingMessage.author.displayName);
         console.log(
-          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`
+          `${logPrefix} Processing 'CLOSING:' block by ${closerUser} (ID: ${closerId})`,
         );
 
         const messageContentLines = closingMessage.content.split("\n");
@@ -1563,7 +1625,7 @@ async function processThread(
             : [];
           if (usersRaw.length > 3 && !autoClosingGenerated) {
             validationErrorMessages.push(
-              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${usersRaw.length}.`
+              `Error: "CLOSING:" line max 3 P/S/T users. Found: ${usersRaw.length}.`,
             );
           }
 
@@ -1606,21 +1668,29 @@ async function processThread(
       if (botConfig.errorNotificationUserID)
         flagMessage += ` <@${botConfig.errorNotificationUserID}>`;
       await threadChannel.send(flagMessage);
-      return { success: false, reason: "oo_link_not_found_and_flagged", status: 'flagged' };
+      return {
+        success: false,
+        reason: "oo_link_not_found_and_flagged",
+        status: "flagged",
+      };
     }
 
     if (validationErrorMessages.length > 0) {
       console.error(
-        `${logPrefix} Validation errors: ${validationErrorMessages.join("; ")}.`
+        `${logPrefix} Validation errors: ${validationErrorMessages.join("; ")}.`,
       );
       let errReply = `Error(s) found (data not saved):\n- ${validationErrorMessages.join(
-        "\n- "
+        "\n- ",
       )}`;
       if (botConfig.errorNotificationUserID)
         errReply += ` <@${botConfig.errorNotificationUserID}>`;
       errReply += "\n\nPlease correct and re-run `!recordt`.";
       await threadChannel.send(errReply);
-      return { success: false, reason: "validation_error_in_closing_block", status: 'flagged' };
+      return {
+        success: false,
+        reason: "validation_error_in_closing_block",
+        status: "flagged",
+      };
     }
 
     const rowData = {
@@ -1645,6 +1715,7 @@ async function processThread(
       "BONKED 3": Array.from(bonkedUsersData.tertiary).join(", ") || "",
       "BONKED 4": Array.from(bonkedUsersData.btertiary).join(", ") || "",
       "Type (PM / Snap, etc)": typeColumn,
+      "Paid?": botConfig.autoSetPaidToN ? "N" : "",
     };
 
     if (!googleDoc) {
@@ -1676,21 +1747,17 @@ async function processThread(
           `**Findoor(s):** ${Array.from(findoorUsers).join(", ") || "None"}\n` +
           `**Closer:** ${closerUser || "-"}, **Recorder:** ${recorderUser}\n` +
           `**Bonkers:** ${bonkersInMessageText.join(", ") || "None"}\n` +
-          `**BONKED P/S/T/BT:** P:[${
+          `**BONKED:** P:[${
             Array.from(bonkedUsersData.primary).join(", ") || "N"
-          }] S:[${
-            Array.from(bonkedUsersData.secondary).join(", ") || "N"
-          }] T:[${
-            Array.from(bonkedUsersData.tertiary).join(", ") || "N"
-          }] BT:[${Array.from(bonkedUsersData.btertiary).join(", ") || "N"}]`;
+          }]`;
       }
       await threadChannel.send(resp);
-      return { success: true, action: result.action, status: 'processed' };
+      return { success: true, action: result.action, status: "processed" };
     } else {
       console.error(
         `${logPrefix} Failed to save/update sheet. Message: ${
           result.message || "Unknown"
-        }`
+        }`,
       );
       let errSave = `Error: Issue saving/updating sheet for "${proposalNameForSheet}".`;
       if (botConfig.errorNotificationUserID)
@@ -1698,8 +1765,8 @@ async function processThread(
       await threadChannel.send(errSave);
       return {
         success: false,
-        reason: result.reason || result.action || "sheets_upsert_error", 
-        status: 'flagged'
+        reason: result.reason || result.action || "sheets_upsert_error",
+        status: "flagged",
       };
     }
   } catch (error) {
@@ -1712,39 +1779,39 @@ async function processThread(
       await threadChannel.send(majErr);
     } catch (sendError) {
       console.error(
-        `${logPrefix} CRITICAL: Could not even send error message to thread. Error: ${sendError.message}`
+        `${logPrefix} CRITICAL: Could not even send error message to thread. Error: ${sendError.message}`,
       );
     }
 
-    return { success: false, reason: "unknown_error", status: 'flagged' };
-  } 
+    return { success: false, reason: "unknown_error", status: "flagged" };
+  }
 }
 
 async function performMassScan() {
   if (!botConfig.autoProcessingEnabled) {
     console.log(
-      `[${new Date().toISOString()}] Auto-processing is disabled. Scan skipped.`
+      `[${new Date().toISOString()}] Auto-processing is disabled. Scan skipped.`,
     );
     scheduleNextScan();
     return;
   }
   if (isMassScanInProgress) {
     console.log(
-      `[${new Date().toISOString()}] Mass scan already in progress. Skipping this cycle.`
+      `[${new Date().toISOString()}] Mass scan already in progress. Skipping this cycle.`,
     );
     return;
   }
 
   isMassScanInProgress = true;
   console.log(
-    `[${new Date().toISOString()}] Starting scheduled mass ticket scan... Lock acquired.`
+    `[${new Date().toISOString()}] Starting scheduled mass ticket scan... Lock acquired.`,
   );
 
   try {
     const guild = client.guilds.cache.first();
     if (!guild) {
       console.log(
-        `[${new Date().toISOString()}] Bot is not in a guild. Scan aborted.`
+        `[${new Date().toISOString()}] Bot is not in a guild. Scan aborted.`,
       );
       return;
     }
@@ -1770,7 +1837,7 @@ async function performMassScan() {
       console.log(
         `[${new Date().toISOString()}] Found ${
           channelsToProcess.length
-        } eligible ticket(s) for processing.`
+        } eligible ticket(s) for processing.`,
       );
 
       console.log("Sorting tickets by proposal number...");
@@ -1784,7 +1851,7 @@ async function performMassScan() {
         const channel = channelsToProcess[i];
         if (currentlyProcessingChannels.has(channel.id)) {
           console.log(
-            `Cron: Channel ${channel.name} is already in processing set, skipping this iteration.`
+            `Cron: Channel ${channel.name} is already in processing set, skipping this iteration.`,
           );
           continue;
         }
@@ -1792,7 +1859,7 @@ async function performMassScan() {
         console.log(
           `[${new Date().toISOString()}] Attempting to process: ${
             channel.name
-          } (${i + 1} of ${channelsToProcess.length}).`
+          } (${i + 1} of ${channelsToProcess.length}).`,
         );
         currentlyProcessingChannels.add(channel.id);
         let processingResult;
@@ -1800,14 +1867,14 @@ async function performMassScan() {
           processingResult = await processTicketChannel(
             channel,
             "Automatic Scan",
-            "standard"
+            "standard",
           );
         } catch (e) {
           console.error(
             `[${new Date().toISOString()}] Uncaught error processing channel ${
               channel.name
             } in mass scan:`,
-            e
+            e,
           );
           processingResult = {
             success: false,
@@ -1818,7 +1885,7 @@ async function performMassScan() {
           console.log(
             `[${new Date().toISOString()}] Finished with ${
               channel.name
-            }. Removed from processing set.`
+            }. Removed from processing set.`,
           );
         }
 
@@ -1835,37 +1902,37 @@ async function performMassScan() {
             reasonsToSkipLongDelay.includes(processingResult.reason)
           ) {
             console.log(
-              `Cron: Ticket ${channel.name} resulted in a skip/flag (${processingResult.reason}). Short delay.`
+              `Cron: Ticket ${channel.name} resulted in a skip/flag (${processingResult.reason}). Short delay.`,
             );
             await new Promise((r) => setTimeout(r, 500));
           } else {
             console.log(
               `Cron: Staggering for ${
                 DELAY_BETWEEN_TICKET_PROCESSING_MS / 1000
-              }s before next ticket.`
+              }s before next ticket.`,
             );
             await new Promise((r) =>
-              setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS)
+              setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS),
             );
           }
         }
       }
     } else {
       console.log(
-        `[${new Date().toISOString()}] No eligible tickets found in this scan cycle.`
+        `[${new Date().toISOString()}] No eligible tickets found in this scan cycle.`,
       );
     }
   } catch (scanError) {
     console.error(
       `[${new Date().toISOString()}] Major error during mass scan execution:`,
-      scanError
+      scanError,
     );
   } finally {
     botConfig.lastSuccessfulScanTimestamp = Date.now();
     await saveConfig(false);
     isMassScanInProgress = false;
     console.log(
-      `[${new Date().toISOString()}] Mass scan finished. Lock released.`
+      `[${new Date().toISOString()}] Mass scan finished. Lock released.`,
     );
     scheduleNextScan();
   }
@@ -1877,15 +1944,15 @@ function scheduleNextScan() {
   }
   if (!botConfig.autoProcessingEnabled) {
     console.log(
-      "Auto-processing disabled, not scheduling next scan via setTimeout."
+      "Auto-processing disabled, not scheduling next scan via setTimeout.",
     );
     return;
   }
   scanTimeoutId = setTimeout(performMassScan, botConfig.processingIntervalMs);
   console.log(
     `Next mass ticket scan scheduled in ~${Math.round(
-      botConfig.processingIntervalMs / 60000
-    )} minutes.`
+      botConfig.processingIntervalMs / 60000,
+    )} minutes.`,
   );
 }
 
@@ -1915,7 +1982,7 @@ client.on("messageCreate", async (message) => {
       const transactionHashMatch = marketLink.match(/transactionHash=([^&]+)/);
       const eventIndexMatch = marketLink.match(/eventIndex=(\d+)/);
       const titleMatch = fullTextContent.match(
-        /q:\s*title:\s*(.*?)(?=\s*,\s*description:)/
+        /q:\s*title:\s*(.*?)(?=\s*,\s*description:)/,
       );
 
       if (
@@ -1932,37 +1999,37 @@ client.on("messageCreate", async (message) => {
         let alreadyVerifiedByOTB = false;
 
         if (otbVerifiedCache.has(uniqueId)) {
-            alreadyVerifiedByOTB = true;
-            otbVerifiedCache.delete(uniqueId); 
-        } 
-
-        else {
-             for (const [key, item] of otbVerifiedCache.entries()) {
-                 if (item.title === marketTitle && !item.uniqueId) {
-                     alreadyVerifiedByOTB = true;
-                     otbVerifiedCache.delete(key);
-                     break;
-                 }
-             }
+          alreadyVerifiedByOTB = true;
+          otbVerifiedCache.delete(uniqueId);
+        } else {
+          for (const [key, item] of otbVerifiedCache.entries()) {
+            if (item.title === marketTitle && !item.uniqueId) {
+              alreadyVerifiedByOTB = true;
+              otbVerifiedCache.delete(key);
+              break;
+            }
+          }
         }
-        
+
         if (alreadyVerifiedByOTB) {
-            console.log(`${logPrefix} Ignoring market "${marketTitle}" as it was already handled by OTBV2.`);
-            return; 
+          console.log(
+            `${logPrefix} Ignoring market "${marketTitle}" as it was already handled by OTBV2.`,
+          );
+          return;
         }
 
         const existingItem = fallbackQueue.find(
-          (item) => item.uniqueId === uniqueId
+          (item) => item.uniqueId === uniqueId,
         );
         if (existingItem) {
           console.log(
-            `${logPrefix} Item with ID ${uniqueId} already in queue. Ignoring.`
+            `${logPrefix} Item with ID ${uniqueId} already in queue. Ignoring.`,
           );
           return;
         }
 
         console.log(
-          `${logPrefix} Detected new market. Adding "${marketTitle}" with ID "${uniqueId}" to fallback queue.`
+          `${logPrefix} Detected new market. Adding "${marketTitle}" with ID "${uniqueId}" to fallback queue.`,
         );
 
         fallbackQueue.push({
@@ -1972,8 +2039,9 @@ client.on("messageCreate", async (message) => {
           timestamp: Date.now(),
         });
 
-        console.log(`[Supervisor] Fallback queue size is now: ${fallbackQueue.length}`);
-
+        console.log(
+          `[Supervisor] Fallback queue size is now: ${fallbackQueue.length}`,
+        );
       } else {
         console.log(`${logPrefix} Could not extract full data.
               - Hash found: ${transactionHashMatch?.[1] ? "Yes" : "No"}
@@ -1984,7 +2052,10 @@ client.on("messageCreate", async (message) => {
     return;
   }
 
-  if (message.channel.id === OTB_VERIFICATIONS_CHANNEL_ID && message.author.id === OTB_BOT_USER_ID) {
+  if (
+    message.channel.id === OTB_VERIFICATIONS_CHANNEL_ID &&
+    message.author.id === OTB_BOT_USER_ID
+  ) {
     const logPrefix = `[Supervisor][OTBV2]`;
     console.log(`${logPrefix} Detected a new message from OTB Bot.`);
 
@@ -1994,59 +2065,79 @@ client.on("messageCreate", async (message) => {
 
     const ooLink = findValidLinkIn(messageContent);
     if (ooLink) {
-        const txHashMatch = ooLink.match(/transactionHash=([^&]+)/);
-        const eventIndexMatch = ooLink.match(/eventIndex=(\d+)/);
-        if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
-            uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
-        }
+      const txHashMatch = ooLink.match(/transactionHash=([^&]+)/);
+      const eventIndexMatch = ooLink.match(/eventIndex=(\d+)/);
+      if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+        uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+      }
     }
     if (!uniqueId) {
-        const txHashMatch = messageContent.match(/transactionHash=?(0x[a-fA-F0-9]{64})/);
-        const eventIndexMatch = messageContent.match(/eventIndex=(\d+)/);
-        if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
-            uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
-        }
+      const txHashMatch = messageContent.match(
+        /transactionHash=?(0x[a-fA-F0-9]{64})/,
+      );
+      const eventIndexMatch = messageContent.match(/eventIndex=(\d+)/);
+      if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
+        uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
+      }
     }
-    
+
     const titleMatch = messageContent.match(/q:\s*title:\s*([^,]+)/);
     if (titleMatch?.[1]) {
-        marketTitle = titleMatch[1].trim();
+      marketTitle = titleMatch[1].trim();
     }
 
     let foundInQueue = false;
     if (uniqueId) {
-        const indexToRemove = fallbackQueue.findIndex(item => item.uniqueId === uniqueId);
-        if (indexToRemove > -1) {
-            const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-            console.log(`${logPrefix} SUCCESS (by ID): Removed "${removedItem.title}" from fallbackQueue.`);
-            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
-            foundInQueue = true;
-        }
+      const indexToRemove = fallbackQueue.findIndex(
+        (item) => item.uniqueId === uniqueId,
+      );
+      if (indexToRemove > -1) {
+        const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+        console.log(
+          `${logPrefix} SUCCESS (by ID): Removed "${removedItem.title}" from fallbackQueue.`,
+        );
+        console.log(
+          `[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`,
+        );
+        foundInQueue = true;
+      }
     }
     if (!foundInQueue && marketTitle) {
-        const indexToRemove = fallbackQueue.findIndex(item => item.title === marketTitle);
-        if (indexToRemove > -1) {
-            const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
-            console.log(`${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallbackQueue.`);
-            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
-            foundInQueue = true;
-        }
+      const indexToRemove = fallbackQueue.findIndex(
+        (item) => item.title === marketTitle,
+      );
+      if (indexToRemove > -1) {
+        const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
+        console.log(
+          `${logPrefix} SUCCESS (by Title): Removed "${removedItem.title}" from fallbackQueue.`,
+        );
+        console.log(
+          `[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`,
+        );
+        foundInQueue = true;
+      }
     }
 
     if (!foundInQueue) {
-        if (uniqueId || marketTitle) {
-            const identifier = marketTitle ? `Market "${marketTitle}"` : `Market with ID "${uniqueId}"`;
-            console.log(`${logPrefix} ${identifier} not in fallbackQueue. Adding to OTB cache.`);
-           
-            const cacheKey = uniqueId || marketTitle;
-            otbVerifiedCache.set(cacheKey, {
-                uniqueId: uniqueId,
-                title: marketTitle,
-                timestamp: Date.now()
-            });
-        } else {
-             console.log(`${logPrefix} FAILED: Could not extract any identifier (ID or Title) from the OTB message.`);
-        }
+      if (uniqueId || marketTitle) {
+        const identifier = marketTitle
+          ? `Market "${marketTitle}"`
+          : `Market with ID "${uniqueId}"`;
+        console.log(
+          `${logPrefix} ${identifier} not in fallbackQueue. Adding to OTB cache.`,
+        );
+
+        const cacheKey = uniqueId || marketTitle;
+        otbVerifiedCache.set(cacheKey, {
+          uniqueId: uniqueId,
+          title: marketTitle,
+          timestamp: Date.now(),
+        });
+      } else {
+        console.log(
+          `${logPrefix} FAILED: Could not extract any identifier (ID or Title) from the OTB message.`,
+        );
+      }
     }
     return;
   }
@@ -2064,7 +2155,7 @@ client.on("messageCreate", async (message) => {
 
     if (message.channel.isThread()) {
       await message.reply(
-        "Error: !record is just for using on tickets... Use !recordt instead"
+        "Error: !record is just for using on tickets... Use !recordt instead",
       );
       return;
     }
@@ -2081,13 +2172,13 @@ client.on("messageCreate", async (message) => {
     }
 
     await message.reply(
-      `Processing ${message.channel.name} as ${recordType}...`
+      `Processing ${message.channel.name} as ${recordType}...`,
     );
     await processTicketChannel(message.channel, initiatedByString, recordType);
   } else if (commandName === "recordt") {
     if (!message.channel.isThread()) {
       await message.reply(
-        "Error: !recordt is just for using on threads... Use !record instead"
+        "Error: !recordt is just for using on threads... Use !record instead",
       );
       return;
     }
@@ -2105,54 +2196,61 @@ client.on("messageCreate", async (message) => {
 
     let actualThreadName = message.channel.name;
     try {
-        const starterMessage = await message.channel.fetchStarterMessage();
-        if (starterMessage && starterMessage.content) {
-            const linkPosition = starterMessage.content.lastIndexOf('https://discord.com/channels/');
-            if (linkPosition !== -1) {
-                actualThreadName = starterMessage.content.substring(0, linkPosition).trim();
-            }
+      const starterMessage = await message.channel.fetchStarterMessage();
+      if (starterMessage && starterMessage.content) {
+        const linkPosition = starterMessage.content.lastIndexOf(
+          "https://discord.com/channels/",
+        );
+        if (linkPosition !== -1) {
+          actualThreadName = starterMessage.content
+            .substring(0, linkPosition)
+            .trim();
         }
+      }
     } catch (e) {
-        console.error(`[recordt] Could not fetch starter message to get real name for thread ${message.channel.id}`);
+      console.error(
+        `[recordt] Could not fetch starter message to get real name for thread ${message.channel.id}`,
+      );
     }
 
     const displayName = actualThreadName;
 
     const processingMessage = await message.reply(
-      `Processing thread "${displayName}" as ${recordType}...`
+      `Processing thread "${displayName}" as ${recordType}...`,
     );
 
-    const result = await message.reply(
-      `Processing thread ${message.channel.name} as ${recordType}...`
-    );
-    await processThread(
+    const result = await processThread(
       message.channel,
       message.member.displayName,
-      recordType
+      recordType,
     );
 
-    if (result) { 
-        if (result.success) {
+    if (result) {
+      if (result.success) {
+      } else {
+        if (result.reason === "already_processed") {
+          await processingMessage.edit(
+            `ℹ️ This thread has already been processed.`,
+          );
+        } else if (result.reason === "manual_flag_found") {
+          await processingMessage.edit(
+            `⛔ Processing stopped: A manual flag was found in this thread.`,
+          );
         } else {
-            if (result.reason === 'already_processed') {
-                await processingMessage.edit(`ℹ️ This thread has already been processed.`);
-            } else if (result.reason === 'manual_flag_found') {
-                await processingMessage.edit(`⛔ Processing stopped: A manual flag was found in this thread.`);
-            } else {
-            }
         }
+      }
     }
   } else if (commandName === "processthreads") {
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
 
     const dateString = args[0];
-    const timeString = args[1]; 
+    const timeString = args[1];
 
     if (!dateString) {
       return message.reply(
-        "Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`"
+        "Please provide a start date. \n**Format:** `!processthreads YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!processthreads 2023-11-29 21:00`",
       );
     }
 
@@ -2172,28 +2270,30 @@ client.on("messageCreate", async (message) => {
         ? `${dateString} at ${timeString} UTC`
         : dateString;
       await message.reply(
-        `Querying threads created on or after **${feedbackDate}**. Please wait...`
+        `Querying threads created on or after **${feedbackDate}**. Please wait...`,
       );
     } catch (e) {
       return message.reply(
-        "Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC)."
+        "Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).",
       );
     }
 
     try {
       const parentChannel = await client.channels.fetch(
-        FAILED_TICKETS_FORUM_ID
+        FAILED_TICKETS_FORUM_ID,
       );
       if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
         return message.channel.send(
-          "Error: Could not find the configured text channel for threads."
+          "Error: Could not find the configured text channel for threads.",
         );
       }
 
       let allThreads = [];
       let lastMessageId = null;
       let fetchMore = true;
-      console.log(`[Backlog] Starting deep scan for threads newer than ${new Date(startTimestamp).toISOString()}`);
+      console.log(
+        `[Backlog] Starting deep scan for threads newer than ${new Date(startTimestamp).toISOString()}`,
+      );
 
       while (fetchMore) {
         const options = { limit: 100 };
@@ -2222,18 +2322,20 @@ client.on("messageCreate", async (message) => {
         }
       }
 
-      console.log(`[Backlog] Deep scan complete. Found ${allThreads.length} potential threads.`);
+      console.log(
+        `[Backlog] Deep scan complete. Found ${allThreads.length} potential threads.`,
+      );
 
       if (allThreads.length === 0) {
         return message.channel.send(
-          "No threads found created on or after the specified date and time."
+          "No threads found created on or after the specified date and time.",
         );
       }
 
       allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
       await message.channel.send(
-        `Scan complete. Starting backlog process for **${allThreads.length}** threads. Each will be re-archived.`
+        `Scan complete. Starting backlog process for **${allThreads.length}** threads. Each will be re-archived.`,
       );
 
       let processedCount = 0;
@@ -2247,176 +2349,258 @@ client.on("messageCreate", async (message) => {
         let shouldArchive = true;
 
         try {
-          const fetchedThread = await client.channels.fetch(thread.id).catch(() => null);
+          const fetchedThread = await client.channels
+            .fetch(thread.id)
+            .catch(() => null);
           if (!fetchedThread) {
-            console.warn(`[Backlog] ${progress} Could not fetch thread ${thread.name}. It might have been deleted. Skipping.`);
+            console.warn(
+              `[Backlog] ${progress} Could not fetch thread ${thread.name}. It might have been deleted. Skipping.`,
+            );
             continue;
           }
-          
+
           const wasArchived = fetchedThread.archived;
 
           if (wasArchived) {
-              await fetchedThread.setArchived(false);
+            await fetchedThread.setArchived(false);
           }
-          
-          const lastMessages = await fetchedThread.messages.fetch({ limit: 10 });
-          const isProcessed = lastMessages.some(m => 
-              m.author.id === client.user.id && m.content.toLowerCase().startsWith("thread data for")
+
+          const lastMessages = await fetchedThread.messages.fetch({
+            limit: 10,
+          });
+          const isProcessed = lastMessages.some(
+            (m) =>
+              m.author.id === client.user.id &&
+              m.content.toLowerCase().startsWith("thread data for"),
           );
 
           if (!isProcessed) {
             processedCount++;
-            console.log(`[Backlog] ${progress} Processing thread: ${fetchedThread.name}`);
+            console.log(
+              `[Backlog] ${progress} Processing thread: ${fetchedThread.name}`,
+            );
 
-            const processingResult = await processThread(fetchedThread, "Manual Backlog Process");
+            const processingResult = await processThread(
+              fetchedThread,
+              "Manual Backlog Process",
+            );
 
-            if (processingResult && processingResult.status === 'flagged') {
-                shouldArchive = false;
-                flaggedCount++;
-                console.log(`[Backlog] ${progress} Thread ${fetchedThread.name} was flagged for manual review. Leaving it active.`);
+            if (processingResult && processingResult.status === "flagged") {
+              shouldArchive = false;
+              flaggedCount++;
+              console.log(
+                `[Backlog] ${progress} Thread ${fetchedThread.name} was flagged for manual review. Leaving it active.`,
+              );
             }
 
-            await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS)); 
+            await new Promise((r) =>
+              setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS),
+            );
           } else {
-            console.log(`[Backlog] ${progress} Skipping already processed thread: ${fetchedThread.name}`);
+            console.log(
+              `[Backlog] ${progress} Skipping already processed thread: ${fetchedThread.name}`,
+            );
           }
-          
+
           if (shouldArchive && !fetchedThread.archived) {
-              await fetchedThread.setArchived(true, "Backlog processing cleanup");
+            await fetchedThread.setArchived(true, "Backlog processing cleanup");
           }
-
         } catch (err) {
-            failedCount++;
-            if (err.message.toLowerCase().includes('maximum number of active threads')) {
-                console.warn(`[Backlog] ${progress} Max active threads limit reached. Pausing for 30 seconds...`);
-                await message.channel.send(`⚠️ Max active threads limit reached. Pausing for 30 seconds to recover...`);
-                await new Promise(r => setTimeout(r, 30000));
-                i--; 
-                continue;
-            }
-            console.warn(`[Backlog] ${progress} Critical error on thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`);
+          failedCount++;
+          if (
+            err.message
+              .toLowerCase()
+              .includes("maximum number of active threads")
+          ) {
+            console.warn(
+              `[Backlog] ${progress} Max active threads limit reached. Pausing for 30 seconds...`,
+            );
+            await message.channel.send(
+              `⚠️ Max active threads limit reached. Pausing for 30 seconds to recover...`,
+            );
+            await new Promise((r) => setTimeout(r, 30000));
+            i--;
+            continue;
+          }
+          console.warn(
+            `[Backlog] ${progress} Critical error on thread ${thread.name} (${thread.id}). Skipping. Error: ${err.message}`,
+          );
 
-            try {
-                const errorThread = await client.channels.fetch(thread.id).catch(() => null);
-                if (errorThread && !errorThread.archived) {
-                    await errorThread.setArchived(true, "Archiving after error");
-                }
-            } catch (archiveErr) { }
+          try {
+            const errorThread = await client.channels
+              .fetch(thread.id)
+              .catch(() => null);
+            if (errorThread && !errorThread.archived) {
+              await errorThread.setArchived(true, "Archiving after error");
+            }
+          } catch (archiveErr) {}
         }
       }
 
       await message.channel.send(
-        `✅ Backlog processing complete! \n- Processed: **${processedCount}** new threads. \n- Flagged for review: **${flaggedCount}** (left active). \n- Skipped/Failed: **${failedCount}**.`
+        `✅ Backlog processing complete! \n- Processed: **${processedCount}** new threads. \n- Flagged for review: **${flaggedCount}** (left active). \n- Skipped/Failed: **${failedCount}**.`,
       );
     } catch (error) {
-      console.error("[Backlog] Major error during thread backlog processing:", error);
+      console.error(
+        "[Backlog] Major error during thread backlog processing:",
+        error,
+      );
       await message.channel.send(
-        "A critical error occurred during the backlog process. Check the logs."
+        "A critical error occurred during the backlog process. Check the logs.",
       );
     }
   } else if (commandName === "forcereprocess") {
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
-    
+
     const dateString = args[0];
     const timeString = args[1]; // Nuevo parámetro para la hora
 
     if (!dateString) {
-        return message.reply("Please provide a start date. \n**Format:** `!forcereprocess YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!forcereprocess 2023-12-06 14:30`");
+      return message.reply(
+        "Please provide a start date. \n**Format:** `!forcereprocess YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!forcereprocess 2023-12-06 14:30`",
+      );
     }
 
     let startTimestamp;
     try {
-        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
-        const startDate = new Date(fullDateTimeString);
-        if (isNaN(startDate.getTime())) {
-            throw new Error("Invalid date or time format.");
-        }
-        startTimestamp = startDate.getTime();
+      const fullDateTimeString = timeString
+        ? `${dateString}T${timeString}:00Z`
+        : `${dateString}T00:00:00Z`;
+      const startDate = new Date(fullDateTimeString);
+      if (isNaN(startDate.getTime())) {
+        throw new Error("Invalid date or time format.");
+      }
+      startTimestamp = startDate.getTime();
     } catch (e) {
-        return message.reply("Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).");
+      return message.reply(
+        "Invalid date or time format. Please use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).",
+      );
     }
-    
-    const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
 
-    const confirmation = await message.reply(`⚠️ **WARNING:** This command will re-process ALL threads created on or after **${feedbackDate}**. It will re-archive each thread. This can take a very long time. Are you sure? Type \`YES\` to confirm.`);
+    const feedbackDate = timeString
+      ? `${dateString} at ${timeString} UTC`
+      : dateString;
 
-    const filter = m => m.author.id === message.author.id && m.content.toUpperCase() === 'YES';
+    const confirmation = await message.reply(
+      `⚠️ **WARNING:** This command will re-process ALL threads created on or after **${feedbackDate}**. It will re-archive each thread. This can take a very long time. Are you sure? Type \`YES\` to confirm.`,
+    );
+
+    const filter = (m) =>
+      m.author.id === message.author.id && m.content.toUpperCase() === "YES";
     try {
-        await message.channel.awaitMessages({ filter, max: 1, time: 15000, errors: ['time'] });
+      await message.channel.awaitMessages({
+        filter,
+        max: 1,
+        time: 15000,
+        errors: ["time"],
+      });
     } catch (e) {
-        return confirmation.edit("Confirmation timed out. Reprocessing cancelled.");
+      return confirmation.edit(
+        "Confirmation timed out. Reprocessing cancelled.",
+      );
     }
-    
-    await confirmation.edit(`Confirmed. Starting FORCE REPROCESSING for threads since **${feedbackDate}**. Each thread will be re-archived.`);
+
+    await confirmation.edit(
+      `Confirmed. Starting FORCE REPROCESSING for threads since **${feedbackDate}**. Each thread will be re-archived.`,
+    );
 
     try {
-        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
-            return message.channel.send("Error: Could not find the configured text channel.");
-        }
+      const parentChannel = await client.channels.fetch(
+        FAILED_TICKETS_FORUM_ID,
+      );
+      if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+        return message.channel.send(
+          "Error: Could not find the configured text channel.",
+        );
+      }
 
-        let allThreads = [];
-        let lastMessageId = null;
-        let fetchMore = true;
-        while(fetchMore) {
-            const options = { limit: 100 };
-            if (lastMessageId) options.before = lastMessageId;
-            const messages = await parentChannel.messages.fetch(options);
-            if (messages.size === 0) { fetchMore = false; break; }
-            for (const msg of messages.values()) {
-                if (msg.createdTimestamp < startTimestamp) { fetchMore = false; break; }
-                if (msg.thread) allThreads.push(msg.thread);
+      let allThreads = [];
+      let lastMessageId = null;
+      let fetchMore = true;
+      while (fetchMore) {
+        const options = { limit: 100 };
+        if (lastMessageId) options.before = lastMessageId;
+        const messages = await parentChannel.messages.fetch(options);
+        if (messages.size === 0) {
+          fetchMore = false;
+          break;
+        }
+        for (const msg of messages.values()) {
+          if (msg.createdTimestamp < startTimestamp) {
+            fetchMore = false;
+            break;
+          }
+          if (msg.thread) allThreads.push(msg.thread);
+        }
+        if (fetchMore) lastMessageId = messages.lastKey();
+      }
+
+      if (allThreads.length === 0) {
+        return message.channel.send(
+          "No threads found to re-process after the specified date and time.",
+        );
+      }
+
+      allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+      await message.channel.send(
+        `Found **${allThreads.length}** threads to force-reprocess. This will take approximately ${((allThreads.length * (DELAY_BETWEEN_TICKET_PROCESSING_MS + 2000)) / 60000).toFixed(1)} minutes.`,
+      );
+
+      for (let i = 0; i < allThreads.length; i++) {
+        const thread = allThreads[i];
+        const progress = `(${i + 1}/${allThreads.length})`;
+
+        try {
+          const fetchedThread = await client.channels.fetch(thread.id);
+
+          console.log(
+            `[Force Reprocess] ${progress} Processing thread: ${fetchedThread.name}`,
+          );
+
+          await processThread(fetchedThread, "Forced Reprocess by Admin");
+
+          if (fetchedThread && !fetchedThread.archived) {
+            await fetchedThread.setArchived(true, "Forced re-process cleanup");
+          }
+
+          await new Promise((r) =>
+            setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS),
+          );
+        } catch (err) {
+          console.warn(
+            `[Force Reprocess] ${progress} Failed to re-process thread ${thread.name}. Error: ${err.message}`,
+          );
+          try {
+            const errorThread = await client.channels
+              .fetch(thread.id)
+              .catch(() => null);
+            if (errorThread && !errorThread.archived) {
+              await errorThread.setArchived(true, "Archiving after error");
             }
-            if(fetchMore) lastMessageId = messages.lastKey();
+          } catch (archiveErr) {
+            /* Ignorar */
+          }
         }
+      }
 
-        if (allThreads.length === 0) {
-            return message.channel.send("No threads found to re-process after the specified date and time.");
-        }
-        
-        allThreads.sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-        
-        await message.channel.send(`Found **${allThreads.length}** threads to force-reprocess. This will take approximately ${((allThreads.length * (DELAY_BETWEEN_TICKET_PROCESSING_MS + 2000)) / 60000).toFixed(1)} minutes.`);
-
-        for (let i = 0; i < allThreads.length; i++) {
-            const thread = allThreads[i];
-            const progress = `(${i + 1}/${allThreads.length})`;
-            
-            try {
-                const fetchedThread = await client.channels.fetch(thread.id);
-                
-                console.log(`[Force Reprocess] ${progress} Processing thread: ${fetchedThread.name}`);
-                
-                await processThread(fetchedThread, "Forced Reprocess by Admin");
-                
-                if (fetchedThread && !fetchedThread.archived) {
-                    await fetchedThread.setArchived(true, "Forced re-process cleanup");
-                }
-                
-                await new Promise(r => setTimeout(r, DELAY_BETWEEN_TICKET_PROCESSING_MS));
-
-            } catch (err) {
-                 console.warn(`[Force Reprocess] ${progress} Failed to re-process thread ${thread.name}. Error: ${err.message}`);
-                 try {
-                     const errorThread = await client.channels.fetch(thread.id).catch(() => null);
-                     if (errorThread && !errorThread.archived) {
-                         await errorThread.setArchived(true, "Archiving after error");
-                     }
-                 } catch (archiveErr) { /* Ignorar */ }
-            }
-        }
-        
-        await message.channel.send("✅ **Force reprocessing complete!** The Google Sheet should now be corrected.");
-
+      await message.channel.send(
+        "✅ **Force reprocessing complete!** The Google Sheet should now be corrected.",
+      );
     } catch (error) {
-        console.error("[Force Reprocess] Major error during forced reprocessing:", error);
-        await message.channel.send("A critical error occurred during the forced reprocessing. Check the logs.");
+      console.error(
+        "[Force Reprocess] Major error during forced reprocessing:",
+        error,
+      );
+      await message.channel.send(
+        "A critical error occurred during the forced reprocessing. Check the logs.",
+      );
     }
   } else if (commandName === "archiveallthreads") {
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
 
     const dateString = args[0];
@@ -2434,7 +2618,7 @@ client.on("messageCreate", async (message) => {
         startTimestamp = startDate.getTime();
       } catch (e) {
         return message.reply(
-          "Invalid date/time format. Use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC)."
+          "Invalid date/time format. Use `YYYY-MM-DD` and `HH:MM` (optional, 24h UTC).",
         );
       }
     }
@@ -2445,36 +2629,36 @@ client.on("messageCreate", async (message) => {
         : `created since ${dateString}`
       : "in the channel";
     await message.reply(
-      `Starting mass archival of active threads ${feedbackDate}. This may take a few minutes...`
+      `Starting mass archival of active threads ${feedbackDate}. This may take a few minutes...`,
     );
 
     try {
       const parentChannel = await client.channels.fetch(
-        FAILED_TICKETS_FORUM_ID
+        FAILED_TICKETS_FORUM_ID,
       );
       if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
         return message.channel.send(
-          "Error: Could not find the configured text channel for threads."
+          "Error: Could not find the configured text channel for threads.",
         );
       }
 
       const activeThreadsCollection = await parentChannel.threads.fetchActive();
 
       const threadsToArchive = Array.from(
-        activeThreadsCollection.threads.values()
+        activeThreadsCollection.threads.values(),
       ).filter((t) => t.createdTimestamp >= startTimestamp);
 
       if (threadsToArchive.length === 0) {
         return message.channel.send(
-          `No active threads found ${feedbackDate} to archive.`
+          `No active threads found ${feedbackDate} to archive.`,
         );
       }
 
       console.log(
-        `[MassArchive] Found ${threadsToArchive.length} active threads to archive matching the time criteria.`
+        `[MassArchive] Found ${threadsToArchive.length} active threads to archive matching the time criteria.`,
       );
       await message.channel.send(
-        `Found **${threadsToArchive.length}** active threads to archive. Starting process...`
+        `Found **${threadsToArchive.length}** active threads to archive. Starting process...`,
       );
 
       let archivedCount = 0;
@@ -2488,12 +2672,12 @@ client.on("messageCreate", async (message) => {
           await thread.setArchived(true);
           archivedCount++;
           console.log(
-            `[MassArchive] ${progress} Successfully archived thread: ${thread.name}`
+            `[MassArchive] ${progress} Successfully archived thread: ${thread.name}`,
           );
         } catch (archiveError) {
           // Si falla, el log nos dirá exactamente por qué.
           console.warn(
-            `[MassArchive] ${progress} Could not archive thread ${thread.name}. Reason: ${archiveError.message}`
+            `[MassArchive] ${progress} Could not archive thread ${thread.name}. Reason: ${archiveError.message}`,
           );
         }
 
@@ -2502,88 +2686,115 @@ client.on("messageCreate", async (message) => {
       }
 
       await message.channel.send(
-        `✅ Mass archival complete! Successfully archived **${archivedCount}** threads.`
+        `✅ Mass archival complete! Successfully archived **${archivedCount}** threads.`,
       );
     } catch (error) {
       console.error("[MassArchive] Major error during mass archival:", error);
       await message.channel.send(
-        "A critical error occurred during the mass archival process. Check the logs."
+        "A critical error occurred during the mass archival process. Check the logs.",
       );
     }
   } else if (commandName === "unarchive") {
     // --- RESTRICCIÓN DE ACCESO ---
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
 
     const dateString = args[0];
     const timeString = args[1];
 
     if (!dateString) {
-        return message.reply("Please provide a start date. \n**Format:** `!unarchive YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!unarchive 2023-12-19 14:00`");
+      return message.reply(
+        "Please provide a start date. \n**Format:** `!unarchive YYYY-MM-DD [HH:MM]` (time is optional, 24h format, UTC). \n**Example:** `!unarchive 2023-12-19 14:00`",
+      );
     }
 
     let startTimestamp;
     try {
-        const fullDateTimeString = timeString ? `${dateString}T${timeString}:00Z` : `${dateString}T00:00:00Z`;
-        const startDate = new Date(fullDateTimeString);
-        if (isNaN(startDate.getTime())) { throw new Error("Invalid date"); }
-        startTimestamp = startDate.getTime();
+      const fullDateTimeString = timeString
+        ? `${dateString}T${timeString}:00Z`
+        : `${dateString}T00:00:00Z`;
+      const startDate = new Date(fullDateTimeString);
+      if (isNaN(startDate.getTime())) {
+        throw new Error("Invalid date");
+      }
+      startTimestamp = startDate.getTime();
     } catch (e) {
-        return message.reply("Invalid date/time format.");
+      return message.reply("Invalid date/time format.");
     }
-    
-    const feedbackDate = timeString ? `${dateString} at ${timeString} UTC` : dateString;
-    await message.reply(`Searching for archived threads created since **${feedbackDate}** to unarchive. Please wait...`);
+
+    const feedbackDate = timeString
+      ? `${dateString} at ${timeString} UTC`
+      : dateString;
+    await message.reply(
+      `Searching for archived threads created since **${feedbackDate}** to unarchive. Please wait...`,
+    );
 
     try {
-        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
-            return message.channel.send("Error: Could not find the configured text channel.");
+      const parentChannel = await client.channels.fetch(
+        FAILED_TICKETS_FORUM_ID,
+      );
+      if (!parentChannel || parentChannel.type !== ChannelType.GuildText) {
+        return message.channel.send(
+          "Error: Could not find the configured text channel.",
+        );
+      }
+
+      const archivedThreadsCollection =
+        await parentChannel.threads.fetchArchived({ fetchAll: true });
+
+      const threadsToUnarchive = Array.from(
+        archivedThreadsCollection.threads.values(),
+      ).filter((t) => t.createdTimestamp >= startTimestamp);
+
+      if (threadsToUnarchive.length === 0) {
+        return message.channel.send(
+          `No archived threads found matching the criteria since ${feedbackDate}.`,
+        );
+      }
+
+      await message.channel.send(
+        `Found **${threadsToUnarchive.length}** archived threads to restore. Starting now...`,
+      );
+
+      let unarchivedCount = 0;
+      for (let i = 0; i < threadsToUnarchive.length; i++) {
+        const thread = threadsToUnarchive[i];
+        const progress = `(${i + 1}/${threadsToUnarchive.length})`;
+
+        try {
+          if (thread.archived) {
+            await thread.setArchived(false);
+            unarchivedCount++;
+            console.log(
+              `[Unarchive] ${progress} Successfully unarchived thread: ${thread.name}`,
+            );
+          }
+        } catch (err) {
+          console.warn(
+            `[Unarchive] ${progress} Failed to unarchive thread ${thread.name}. Error: ${err.message}`,
+          );
         }
+        // Pausa para no saturar la API
+        await new Promise((r) => setTimeout(r, 1000));
+      }
 
-        const archivedThreadsCollection = await parentChannel.threads.fetchArchived({fetchAll: true});
-        
-        const threadsToUnarchive = Array.from(archivedThreadsCollection.threads.values())
-            .filter(t => t.createdTimestamp >= startTimestamp);
-
-        if (threadsToUnarchive.length === 0) {
-            return message.channel.send(`No archived threads found matching the criteria since ${feedbackDate}.`);
-        }
-
-        await message.channel.send(`Found **${threadsToUnarchive.length}** archived threads to restore. Starting now...`);
-
-        let unarchivedCount = 0;
-        for (let i = 0; i < threadsToUnarchive.length; i++) {
-            const thread = threadsToUnarchive[i];
-            const progress = `(${i + 1}/${threadsToUnarchive.length})`;
-
-            try {
-                if (thread.archived) {
-                    await thread.setArchived(false);
-                    unarchivedCount++;
-                    console.log(`[Unarchive] ${progress} Successfully unarchived thread: ${thread.name}`);
-                }
-            } catch (err) {
-                console.warn(`[Unarchive] ${progress} Failed to unarchive thread ${thread.name}. Error: ${err.message}`);
-            }
-            // Pausa para no saturar la API
-            await new Promise(r => setTimeout(r, 1000));
-        }
-        
-        await message.channel.send(`✅ Unarchive process complete! Successfully restored **${unarchivedCount}** threads.`);
-
+      await message.channel.send(
+        `✅ Unarchive process complete! Successfully restored **${unarchivedCount}** threads.`,
+      );
     } catch (error) {
-        console.error("[Unarchive] Major error during unarchive command:", error);
-        await message.channel.send("A critical error occurred during the unarchive process. Check the logs.");
+      console.error("[Unarchive] Major error during unarchive command:", error);
+      await message.channel.send(
+        "A critical error occurred during the unarchive process. Check the logs.",
+      );
     }
   } else if (commandName === "findduplicates") {
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
 
     await message.reply(
-      "🔍 Starting scan for duplicate tickets... This may take a moment as I'm checking both sheets."
+      "🔍 Starting scan for duplicate tickets... This may take a moment as I'm checking both sheets.",
     );
 
     try {
@@ -2593,7 +2804,7 @@ client.on("messageCreate", async (message) => {
 
       if (!findoorSheet || !verificationsSheet) {
         return message.channel.send(
-          "Error: Could not find the required worksheets ('Findoors' and 'Verifications')."
+          "Error: Could not find the required worksheets ('Findoors' and 'Verifications').",
         );
       }
 
@@ -2601,10 +2812,10 @@ client.on("messageCreate", async (message) => {
       console.log("[Duplicates] Fetching all OO Links from Findoors sheet...");
       const findoorRows = await findoorSheet.getRows();
       const findoorLinks = new Set(
-        findoorRows.map((row) => row.get("OO Link")).filter(Boolean)
+        findoorRows.map((row) => row.get("OO Link")).filter(Boolean),
       );
       console.log(
-        `[Duplicates] Loaded ${findoorLinks.size} unique links from Findoors.`
+        `[Duplicates] Loaded ${findoorLinks.size} unique links from Findoors.`,
       );
 
       // 2. Revisar la hoja de Verifications y comparar
@@ -2632,7 +2843,7 @@ client.on("messageCreate", async (message) => {
 
       if (duplicatesFound.length === 0) {
         return message.channel.send(
-          "✅ No unprocessed duplicate tickets were found."
+          "✅ No unprocessed duplicate tickets were found.",
         );
       }
 
@@ -2651,22 +2862,22 @@ client.on("messageCreate", async (message) => {
     } catch (error) {
       console.error("[Duplicates] Error during findduplicates command:", error);
       await message.channel.send(
-        "An error occurred while scanning for duplicates. Check the logs."
+        "An error occurred while scanning for duplicates. Check the logs.",
       );
     }
   } else if (commandName === "fixduplicates") {
-    if (message.author.id !== '907390293316337724') {
-        return message.reply("⛔ This command is restricted to the bot owner.");
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
     }
 
     if (args[0] !== "confirm") {
       return message.reply(
-        "This is a destructive action. To proceed, run the command again with `confirm`.\n**Example:** `!fixduplicates confirm`"
+        "This is a destructive action. To proceed, run the command again with `confirm`.\n**Example:** `!fixduplicates confirm`",
       );
     }
 
     await message.reply(
-      "⚙️ Starting automatic fix for duplicate tickets... This will modify the spreadsheet and may take some time."
+      "⚙️ Starting automatic fix for duplicate tickets... This will modify the spreadsheet and may take some time.",
     );
 
     try {
@@ -2678,16 +2889,16 @@ client.on("messageCreate", async (message) => {
       }
 
       console.log(
-        "[FixDuplicates] Fetching all OO Links from Findoors sheet..."
+        "[FixDuplicates] Fetching all OO Links from Findoors sheet...",
       );
       const findoorRows = await findoorSheet.getRows();
       const findoorLinks = new Set(
-        findoorRows.map((row) => row.get("OO Link")).filter(Boolean)
+        findoorRows.map((row) => row.get("OO Link")).filter(Boolean),
       );
       console.log(`[FixDuplicates] Loaded ${findoorLinks.size} unique links.`);
 
       console.log(
-        "[FixDuplicates] Scanning Verifications sheet to find and update matches..."
+        "[FixDuplicates] Scanning Verifications sheet to find and update matches...",
       );
       const verificationsRows = await verificationsSheet.getRows();
       let updatedCount = 0;
@@ -2704,8 +2915,8 @@ client.on("messageCreate", async (message) => {
         ) {
           console.log(
             `[FixDuplicates] Updating Order #${row.get(
-              ORDER_COLUMN_HEADER
-            )} to "Duplicate".`
+              ORDER_COLUMN_HEADER,
+            )} to "Duplicate".`,
           );
           row.set("Primary", "Duplicate");
           row.set("Secondary", "");
@@ -2736,20 +2947,20 @@ client.on("messageCreate", async (message) => {
 
       if (updatedCount > 0) {
         await message.channel.send(
-          `✅ **Fix complete!** Successfully updated **${updatedCount}** duplicate ticket rows.`
+          `✅ **Fix complete!** Successfully updated **${updatedCount}** duplicate ticket rows.`,
         );
       } else {
         await message.channel.send(
-          "✅ No unprocessed duplicate tickets were found to fix."
+          "✅ No unprocessed duplicate tickets were found to fix.",
         );
       }
     } catch (error) {
       console.error(
         "[FixDuplicates] Error during fixduplicates command:",
-        error
+        error,
       );
       await message.channel.send(
-        "An error occurred while fixing duplicates. Check the logs. Some rows may have been updated."
+        "An error occurred while fixing duplicates. Check the logs. Some rows may have been updated.",
       );
     }
   }
@@ -2760,7 +2971,7 @@ client.on("channelCreate", async (channel) => {
     lastTicketToolActivityTimestamp = Date.now();
     const logPrefix = `[Supervisor][${channel.name}]`;
     console.log(
-      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Checking for Ticket Tool message in 5s...`
+      `${logPrefix} New proposal channel detected. Updated Ticket Tool activity timestamp. Checking for Ticket Tool message in 5s...`,
     );
 
     setTimeout(async () => {
@@ -2777,7 +2988,7 @@ client.on("channelCreate", async (channel) => {
 
         if (!ticketToolMessage) {
           console.log(
-            `${logPrefix} WARNING: Ticket Tool message not found on first check. Adding to re-check list.`
+            `${logPrefix} WARNING: Ticket Tool message not found on first check. Adding to re-check list.`,
           );
           channelsToRecheck.add(channel.id);
           return;
@@ -2797,20 +3008,22 @@ client.on("channelCreate", async (channel) => {
           console.log(`${logPrefix} Hash: ${transactionHash}`);
 
           const indexToRemove = fallbackQueue.findIndex(
-            (item) => item.uniqueId === uniqueId
+            (item) => item.uniqueId === uniqueId,
           );
           if (indexToRemove > -1) {
             const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
             console.log(
-              `${logPrefix} SUCCESS: Removed "${removedItem.title}" (ID: ${uniqueId}) from fallback queue.`
+              `${logPrefix} SUCCESS: Removed "${removedItem.title}" (ID: ${uniqueId}) from fallback queue.`,
             );
-            console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
+            console.log(
+              `[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`,
+            );
             return;
           }
 
           if (createdFallbackThreads.has(uniqueId)) {
             console.log(
-              `${logPrefix} DUPLICATE DETECTED: A fallback thread already exists for ID ${uniqueId}. Closing this ticket.`
+              `${logPrefix} DUPLICATE DETECTED: A fallback thread already exists for ID ${uniqueId}. Closing this ticket.`,
             );
 
             try {
@@ -2824,18 +3037,18 @@ client.on("channelCreate", async (channel) => {
           }
 
           console.log(
-            `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it was not in the pending queue or fallback thread list.`
+            `${logPrefix} INFO: Found a unique ID (${uniqueId}), but it was not in the pending queue or fallback thread list.`,
           );
         } else {
           console.log(
-            `${logPrefix} WARNING: Could not extract full ID from the Ticket Tool message.`
+            `${logPrefix} WARNING: Could not extract full ID from the Ticket Tool message.`,
           );
           channelsToRecheck.add(channel.id);
         }
       } catch (e) {
         console.error(
           `${logPrefix} Error fetching messages in new channel:`,
-          e
+          e,
         );
         channelsToRecheck.add(channel.id);
       }
@@ -2855,7 +3068,7 @@ async function processFallbackQueue() {
     }
     if (cleanedCount > 0) {
       console.log(
-        `[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`
+        `[Supervisor] Cleaned up ${cleanedCount} expired fallback thread record(s).`,
       );
     }
   }
@@ -2871,7 +3084,7 @@ async function processFallbackQueue() {
     }
     if (cleanedCount > 0) {
       console.log(
-        `[Supervisor] Cleaned up ${cleanedCount} expired OTB cache record(s).`
+        `[Supervisor] Cleaned up ${cleanedCount} expired OTB cache record(s).`,
       );
     }
   }
@@ -2885,7 +3098,7 @@ async function processFallbackQueue() {
 
   if (channelsToRecheck.size > 0) {
     console.log(
-      `[Supervisor] Performing double check on ${channelsToRecheck.size} suspicious channels...`
+      `[Supervisor] Performing double check on ${channelsToRecheck.size} suspicious channels...`,
     );
     const recheckedIds = new Set(channelsToRecheck);
 
@@ -2904,12 +3117,12 @@ async function processFallbackQueue() {
             if (txHashMatch?.[1] && eventIndexMatch?.[1]) {
               const uniqueId = `${txHashMatch[1]}-${eventIndexMatch[1]}`;
               const indexToRemove = fallbackQueue.findIndex(
-                (item) => item.uniqueId === uniqueId
+                (item) => item.uniqueId === uniqueId,
               );
               if (indexToRemove > -1) {
                 const removedItem = fallbackQueue.splice(indexToRemove, 1)[0];
                 console.log(
-                  `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`
+                  `[Supervisor] DOUBLE CHECK SUCCESS: Cleared "${removedItem.title}" from queue via channel ${channel.name}.`,
                 );
                 foundAndCleared = true;
                 break;
@@ -2920,13 +3133,13 @@ async function processFallbackQueue() {
 
         if (!foundAndCleared) {
           console.log(
-            `[Supervisor] DOUBLE CHECK NOTE: No matching pending item was found in the queue for channel with ID ${channelId}.`
+            `[Supervisor] DOUBLE CHECK NOTE: No matching pending item was found in the queue for channel with ID ${channelId}.`,
           );
         }
       } catch (error) {
         console.error(
           `[Supervisor] Error during double check for channel ID ${channelId}:`,
-          error
+          error,
         );
       } finally {
         channelsToRecheck.delete(channelId);
@@ -2939,7 +3152,7 @@ async function processFallbackQueue() {
 
   if (timeSinceLastTTActivity > TICKET_TOOL_INACTIVITY_THRESHOLD_MS) {
     const itemsToProcess = fallbackQueue.filter(
-      (item) => now - item.timestamp > MIN_AGE_FOR_FALLBACK_CHECK_MS
+      (item) => now - item.timestamp > MIN_AGE_FOR_FALLBACK_CHECK_MS,
     );
 
     if (itemsToProcess.length === 0) {
@@ -2950,17 +3163,17 @@ async function processFallbackQueue() {
     console.log(
       `[Supervisor] Ticket Tool has been inactive for over ${
         TICKET_TOOL_INACTIVITY_THRESHOLD_MS / 60000
-      } minutes.`
+      } minutes.`,
     );
     console.log(
       `[Supervisor] Found ${itemsToProcess.length} items older than ${
         MIN_AGE_FOR_FALLBACK_CHECK_MS / 60000
-      } minutes. Starting fallback creation...`
+      } minutes. Starting fallback creation...`,
     );
 
     const idsToProcess = new Set(itemsToProcess.map((item) => item.uniqueId));
     const newFallbackQueue = fallbackQueue.filter(
-      (item) => !idsToProcess.has(item.uniqueId)
+      (item) => !idsToProcess.has(item.uniqueId),
     );
 
     fallbackQueue.length = 0;
@@ -2968,12 +3181,22 @@ async function processFallbackQueue() {
 
     for (const item of itemsToProcess) {
       try {
-        const targetChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-        if (!targetChannel || (targetChannel.type !== ChannelType.GuildForum && targetChannel.type !== ChannelType.GuildText)) {
-            throw new Error("Target channel not found or is not a text/forum channel.");
+        const targetChannel = await client.channels.fetch(
+          FAILED_TICKETS_FORUM_ID,
+        );
+        if (
+          !targetChannel ||
+          (targetChannel.type !== ChannelType.GuildForum &&
+            targetChannel.type !== ChannelType.GuildText)
+        ) {
+          throw new Error(
+            "Target channel not found or is not a text/forum channel.",
+          );
         }
 
-        console.log(`[Supervisor] Attempting to create fallback thread for "${item.title}"...`);
+        console.log(
+          `[Supervisor] Attempting to create fallback thread for "${item.title}"...`,
+        );
 
         const threadName = `This ticket did not create after 25 mins`;
 
@@ -2985,32 +3208,54 @@ async function processFallbackQueue() {
           name: threadName,
         });
 
-        console.log(`[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`);
+        console.log(
+          `[Supervisor] SUCCESS: Fallback thread created for "${item.title}".`,
+        );
         createdFallbackThreads.set(item.uniqueId, Date.now());
-        console.log(`[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`);
+        console.log(
+          `[Supervisor] Registered fallback for ID ${item.uniqueId}. Now tracking ${createdFallbackThreads.size} threads.`,
+        );
 
-        console.log(`[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`);
-      
-      }  catch (error) {
-        console.error(`[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`, error.message);
+        console.log(
+          `[Supervisor] ${fallbackQueue.length} items remaining in fallback queue.`,
+        );
+      } catch (error) {
+        console.error(
+          `[Supervisor] ERROR: Failed to create fallback thread for "${item.title}":`,
+          error.message,
+        );
 
         const errorMessage = error.message.toLowerCase();
-        if (errorMessage.includes('maximum number of threads') || errorMessage.includes('maximum number of active threads')) {
-            console.log(`[Supervisor] Thread limit reached! Triggering an emergency archive routine...`);
-            
-            try {
-                const logChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID);
-                if (logChannel) {
-                    await logChannel.send("⚠️ Thread limit reached. Running an emergency cleanup. Failed threads will be re-queued.");
-                }
-            } catch (logErr) {
-                console.error("[Supervisor] Could not send emergency log message.", logErr);
+        if (
+          errorMessage.includes("maximum number of threads") ||
+          errorMessage.includes("maximum number of active threads")
+        ) {
+          console.log(
+            `[Supervisor] Thread limit reached! Triggering an emergency archive routine...`,
+          );
+
+          try {
+            const logChannel = await client.channels.fetch(
+              FAILED_TICKETS_FORUM_ID,
+            );
+            if (logChannel) {
+              await logChannel.send(
+                "⚠️ Thread limit reached. Running an emergency cleanup. Failed threads will be re-queued.",
+              );
             }
-            
-            await autoArchiveInactiveThreads();
+          } catch (logErr) {
+            console.error(
+              "[Supervisor] Could not send emergency log message.",
+              logErr,
+            );
+          }
+
+          await autoArchiveInactiveThreads();
         }
-        
-        console.log(`[Supervisor] Re-queuing item "${item.title}" for a later attempt.`);
+
+        console.log(
+          `[Supervisor] Re-queuing item "${item.title}" for a later attempt.`,
+        );
         fallbackQueue.push(item);
       }
 
@@ -3019,7 +3264,9 @@ async function processFallbackQueue() {
       }
     }
 
-    console.log(`[Supervisor] Fallback queue processing finished. ${fallbackQueue.length} items remaining in queue.`);
+    console.log(
+      `[Supervisor] Fallback queue processing finished. ${fallbackQueue.length} items remaining in queue.`,
+    );
 
     isProcessingFallbackQueue = false;
     console.log("[Supervisor] Finished processing fallback queue.");
@@ -3039,7 +3286,7 @@ client.on("interactionCreate", async (interaction) => {
     const subCommand = interaction.options.getSubcommand();
     if (
       !interaction.memberPermissions.has(
-        PermissionsBitField.Flags.Administrator
+        PermissionsBitField.Flags.Administrator,
       )
     ) {
       return interaction.reply({
@@ -3066,7 +3313,7 @@ client.on("interactionCreate", async (interaction) => {
         configChanged = true;
         if (botConfig.autoProcessingEnabled) {
           console.log(
-            "Auto-processing enabled by command. Ensuring next scan is scheduled."
+            "Auto-processing enabled by command. Ensuring next scan is scheduled.",
           );
           isMassScanInProgress = false;
           clearTimeout(scanTimeoutId);
@@ -3074,7 +3321,7 @@ client.on("interactionCreate", async (interaction) => {
         } else {
           clearTimeout(scanTimeoutId);
           console.log(
-            "Auto-processing disabled by command. Future scans cancelled."
+            "Auto-processing disabled by command. Future scans cancelled.",
           );
         }
       }
@@ -3094,7 +3341,7 @@ client.on("interactionCreate", async (interaction) => {
         }
         await interaction.reply({
           content: `Min ticket age: **${ageStr}** (~${Math.round(
-            ms / 60000
+            ms / 60000,
           )}m).`,
           flags: MessageFlags.Ephemeral,
         });
@@ -3103,6 +3350,24 @@ client.on("interactionCreate", async (interaction) => {
           content: `Invalid age: "${ageStr}". Use "2h5m", "30m", "1d", "125" (mins).`,
           flags: MessageFlags.Ephemeral,
         });
+    } else if (subCommand === "toggle_paid_column") {
+      if (interaction.user.id !== "907390293316337724") {
+        return interaction.reply({
+          content: "⛔ This subcommand is restricted to the bot owner.",
+          ephemeral: true,
+        });
+      }
+
+      const newState = interaction.options.getBoolean("enabled");
+      if (botConfig.autoSetPaidToN !== newState) {
+        botConfig.autoSetPaidToN = newState;
+        configChanged = true;
+      }
+
+      await interaction.reply({
+        content: `✅ Automatic setting of "Paid?" to "N" is now **${newState ? "ENABLED" : "DISABLED"}**.`,
+        ephemeral: true,
+      });
     } else if (subCommand === "set_processing_interval") {
       const intervalString = interaction.options.getString("interval");
       const parsedMs = parseDurationToMs(intervalString);
@@ -3111,13 +3376,13 @@ client.on("interactionCreate", async (interaction) => {
           botConfig.processingIntervalMs = parsedMs;
           configChanged = true;
           console.log(
-            `Processing interval changed to ${parsedMs}ms. Re-scheduling next scan.`
+            `Processing interval changed to ${parsedMs}ms. Re-scheduling next scan.`,
           );
           scheduleNextScan();
         }
         await interaction.reply({
           content: `Ticket processing interval set to: **${intervalString}** (~${Math.round(
-            parsedMs / 60000
+            parsedMs / 60000,
           )} minutes). Next scan cycle adjusted.`,
           flags: MessageFlags.Ephemeral,
         });
@@ -3169,7 +3434,7 @@ client.on("interactionCreate", async (interaction) => {
           nextScanInfo = "A scan is due to start very soon.";
         } else {
           nextScanInfo = `Next scan **${formatMsToHumanReadable(
-            timeRemainingMs
+            timeRemainingMs,
           )}**.`;
         }
       }
@@ -3183,6 +3448,7 @@ client.on("interactionCreate", async (interaction) => {
           }**\n` +
           `- Next Scan: ${nextScanInfo}\n` +
           `- Default Post Processing Action: **${botConfig.currentPostProcessingAction}**\n` +
+          `- Automatic "Paid?" to "N" is **${botConfig.autoSetPaidToN}**\n` +
           `- Min Ticket Age for Auto-Processing: **${ageM} minutes**\n` +
           `- Error Notification User: **${errU}**`,
         flags: MessageFlags.Ephemeral,
@@ -3198,7 +3464,7 @@ client.on("interactionCreate", async (interaction) => {
   } else if (commandName === "scan_status") {
     if (
       !interaction.member.permissions.has(
-        PermissionsBitField.Flags.ManageMessages
+        PermissionsBitField.Flags.ManageMessages,
       )
     ) {
       return interaction.reply({
@@ -3241,7 +3507,7 @@ client.on("interactionCreate", async (interaction) => {
   } else if (commandName === "stats") {
     if (
       !interaction.memberPermissions.has(
-        PermissionsBitField.Flags.ManageMessages
+        PermissionsBitField.Flags.ManageMessages,
       )
     ) {
       return interaction.reply({
@@ -3265,7 +3531,6 @@ client.on("interactionCreate", async (interaction) => {
 
       if (fallbackQueue.length > 0) {
         response += "```\n";
-        // Mostramos solo los primeros 10 para no exceder el límite de caracteres
         for (let i = 0; i < Math.min(fallbackQueue.length, 10); i++) {
           response += `${i + 1}. ${fallbackQueue[i].title}\n`;
         }
@@ -3281,7 +3546,6 @@ client.on("interactionCreate", async (interaction) => {
     const startOrder = interaction.options.getInteger("start_order") ?? 0;
     const endOrder = interaction.options.getInteger("end_order") ?? Infinity;
 
-    // Mapeamos el subcomando al nombre exacto de la columna en la hoja de cálculo
     const columnMap = {
       closers: "Closer",
       primary: "Primary",
@@ -3297,7 +3561,7 @@ client.on("interactionCreate", async (interaction) => {
         const responseMessage = await getStatsForColumn(
           targetColumn,
           startOrder,
-          endOrder
+          endOrder,
         );
         await interaction.editReply({ content: responseMessage });
       } catch (error) {
@@ -3326,29 +3590,31 @@ async function initializeBot() {
     console.log(
       `Initial auto-processing state: ${
         botConfig.autoProcessingEnabled ? "Enabled" : "Disabled"
-      }`
+      }`,
     );
     console.log(
       `Initial processing interval: ${
         botConfig.processingIntervalMs / 60000
-      } minutes`
+      } minutes`,
     );
 
     if (botConfig.autoProcessingEnabled) {
       console.log(
-        "Auto-processing is enabled. Performing an initial scan immediately upon startup."
+        "Auto-processing is enabled. Performing an initial scan immediately upon startup.",
       );
       performMassScan();
     } else {
       console.log(
-        "Auto-processing is initially disabled. No scan will run until enabled via command."
+        "Auto-processing is initially disabled. No scan will run until enabled via command.",
       );
     }
   });
 
-  cron.schedule('0 */4 * * *', () => {
-      console.log("[Cron] Triggering scheduled inactive thread archival routine.");
-      autoArchiveInactiveThreads();
+  cron.schedule("0 */4 * * *", () => {
+    console.log(
+      "[Cron] Triggering scheduled inactive thread archival routine.",
+    );
+    autoArchiveInactiveThreads();
   });
   console.log("Scheduled inactive thread archival to run every 4 hours.");
 
@@ -3356,7 +3622,7 @@ async function initializeBot() {
   console.log(
     `[Supervisor] Fallback queue processor started. Checking every ${
       FALLBACK_QUEUE_PROCESS_INTERVAL_MS / 1000
-    } seconds.`
+    } seconds.`,
   );
 
   client.login(DISCORD_TOKEN).catch((err) => {
