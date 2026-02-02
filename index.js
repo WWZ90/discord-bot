@@ -2603,7 +2603,6 @@ client.on("messageCreate", async (message) => {
       return message.reply("⛔ This command is restricted to the bot owner.");
     }
     
-
     const dateString = args[0];
     const timeString = args[1];
     let startTimestamp = 0;
