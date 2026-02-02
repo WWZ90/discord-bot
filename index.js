@@ -60,7 +60,7 @@ const VERIFIER_ID_MAP = {
   "560891548963700749": "Say10",
   "757559795401097276": "ZenMaster",
   "838764590094745631": "Thatcryptogal",
-  "1089111748046495764": "Bonded",
+  "1467559478319910943": "Bonded",
   "620160105748496404": "Nemo",
   "634236418310275072": "Jessica",
   "964250522230087711": "Moon",
@@ -124,7 +124,7 @@ let botConfig = {
   autoProcessingEnabled:
     (process.env.ENABLE_AUTO_PROCESSING || "true").toLowerCase() === "true",
   currentPostProcessingAction: process.env.DEFAULT_TICKET_POST_ACTION || "none",
-  autoSetPaidToN: false,
+  autoSetPaidToN: true,
   minTicketAgeForProcessing: DEFAULT_MIN_TICKET_AGE_MS,
   processingIntervalMs: DEFAULT_PROCESSING_INTERVAL_MS,
   errorNotificationUserID: process.env.DEFAULT_ERROR_USER_ID || null,
@@ -133,6 +133,7 @@ let botConfig = {
 
 const currentlyProcessingChannels = new Set();
 let isMassScanInProgress = false;
+let isBacklogProcessRunning = false;
 let scanTimeoutId = null;
 
 const blockTypes = ["polymarket", "snapshot", "disputed", "assertion"];
@@ -743,7 +744,7 @@ async function autoArchiveInactiveThreads() {
       return;
     }
 
-    const archiveThresholdMs = 24 * 60 * 60 * 1000;
+    const archiveThresholdMs = 2 * 60 * 60 * 1000;
     const now = Date.now();
     let archivedCount = 0;
 
@@ -2279,6 +2280,14 @@ client.on("messageCreate", async (message) => {
     }
 
     try {
+      if (isBacklogProcessRunning) {
+        return message.reply(
+          "⚠️ A backlog process is already running. Please wait for it to finish or use `!stopbacklog`.",
+        );
+      }
+
+      isBacklogProcessRunning = true;
+
       const parentChannel = await client.channels.fetch(
         FAILED_TICKETS_FORUM_ID,
       );
@@ -2343,6 +2352,10 @@ client.on("messageCreate", async (message) => {
       let flaggedCount = 0;
 
       for (let i = 0; i < allThreads.length; i++) {
+        if (!isBacklogProcessRunning) {
+          await message.channel.send("Process stopped by user.");
+          break;
+        }
         const thread = allThreads[i];
         const progress = `(${i + 1}/${allThreads.length})`;
 
@@ -2448,6 +2461,8 @@ client.on("messageCreate", async (message) => {
       await message.channel.send(
         "A critical error occurred during the backlog process. Check the logs.",
       );
+    } finally {
+        isBacklogProcessRunning = false;
     }
   } else if (commandName === "forcereprocess") {
     if (message.author.id !== "907390293316337724") {
@@ -2455,7 +2470,7 @@ client.on("messageCreate", async (message) => {
     }
 
     const dateString = args[0];
-    const timeString = args[1]; // Nuevo parámetro para la hora
+    const timeString = args[1];
 
     if (!dateString) {
       return message.reply(
@@ -2507,6 +2522,12 @@ client.on("messageCreate", async (message) => {
     );
 
     try {
+      if (isBacklogProcessRunning) {
+            return message.reply("⚠️ A backlog process is already running. Please wait for it to finish or use `!stopbacklog`.");
+        }
+      
+      isBacklogProcessRunning = true;
+      
       const parentChannel = await client.channels.fetch(
         FAILED_TICKETS_FORUM_ID,
       );
@@ -2550,6 +2571,10 @@ client.on("messageCreate", async (message) => {
       );
 
       for (let i = 0; i < allThreads.length; i++) {
+        if (!isBacklogProcessRunning) {
+          await message.channel.send("Force reprocess stopped by user.");
+          break; 
+        }
         const thread = allThreads[i];
         const progress = `(${i + 1}/${allThreads.length})`;
 
@@ -2597,12 +2622,14 @@ client.on("messageCreate", async (message) => {
       await message.channel.send(
         "A critical error occurred during the forced reprocessing. Check the logs.",
       );
+    } finally {
+        isBacklogProcessRunning = false;
     }
   } else if (commandName === "archiveallthreads") {
     if (message.author.id !== "907390293316337724") {
       return message.reply("⛔ This command is restricted to the bot owner.");
     }
-    
+
     const dateString = args[0];
     const timeString = args[1];
     let startTimestamp = 0;
@@ -2962,6 +2989,22 @@ client.on("messageCreate", async (message) => {
       await message.channel.send(
         "An error occurred while fixing duplicates. Check the logs. Some rows may have been updated.",
       );
+    }
+  } else if (commandName === "stopbacklog") {
+    if (message.author.id !== "907390293316337724") {
+      return message.reply("⛔ This command is restricted to the bot owner.");
+    }
+
+    if (isBacklogProcessRunning) {
+      isBacklogProcessRunning = false;
+      await message.reply(
+        "🛑 Stop signal received. The current backlog process will stop after completing the current thread. Please wait a moment.",
+      );
+      console.log(
+        `[Backlog] STOP signal received by ${message.author.tag}. Gracefully stopping.`,
+      );
+    } else {
+      await message.reply("ℹ️ No backlog process is currently running.");
     }
   }
 });
