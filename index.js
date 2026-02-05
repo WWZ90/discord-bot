@@ -344,7 +344,7 @@ function parseClosingBlock(lines) {
 
 function parseClosingBlock(lines) {
   const bonkersList = [];
-  const allBonkedUsers = new Set();
+  const allBonkedUsers = [];
 
   let manualLink = null;
   let manualType = null;
@@ -372,7 +372,7 @@ function parseClosingBlock(lines) {
 
         for (const victim of victims) {
           bonkersList.push(bonker);
-          allBonkedUsers.add(victim);
+          allBonkedUsers.push(victim);
         }
         continue;
       }
