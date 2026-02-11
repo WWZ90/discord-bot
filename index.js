@@ -3631,6 +3631,10 @@ async function initializeBot() {
     console.error(`Critical env vars missing. Bot will not start.`);
     return;
   }
+  client.on("debug", console.log);
+  client.on("warn", console.warn);
+  client.on("error", console.error);
+
   client.on("ready", () => {
     console.log(`${client.user.tag} has connected to Discord and is ready!`);
     console.log(
