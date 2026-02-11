@@ -480,7 +480,7 @@ async function loadConfig() {
       console.log(
         "bot_config.json not found. Using defaults. A new file will be created on the first configuration change."
       );
-      await saveConfig(false);
+      //await saveConfig(false);
     } else {
       console.error(
         "Error loading bot_config.json. Using hardcoded/env defaults.",
