@@ -478,7 +478,7 @@ async function loadConfig() {
   } catch (error) {
     if (error.code === "ENOENT") {
       console.log(
-        "bot_config.json not found. Initializing with defaults and creating file.",
+        "bot_config.json not found. Using defaults. A new file will be created on the first configuration change."
       );
       await saveConfig(false);
     } else {
