@@ -845,7 +845,8 @@ async function processTicketChannel(
   );
 
   try {
-    const allMessagesCollection = await channel.messages.fetch({ limit: 100 });
+    const fetchPromise = channel.messages.fetch({ limit: 100 });
+    const allMessagesCollection = await withTimeout(fetchPromise, 15000);
 
     let bonkFound = false;
     let manualClosingMessage = null;
@@ -1413,9 +1414,8 @@ async function processThread(
       }
     }
 
-    const threadMessagesCollection = await threadChannel.messages.fetch({
-      limit: 100,
-    });
+    const fetchPromise = threadChannel.messages.fetch({ limit: 100 });
+    const threadMessagesCollection = await withTimeout(fetchPromise, 15000); 
 
     let bonkFound = false;
     let manualClosingMessage = null;
