@@ -525,6 +525,35 @@ async function saveConfig(logFullObject = true) {
   }
 }
 
+async function getGoogleDoc() {
+    if (googleDoc) {
+        return googleDoc;
+    }
+
+    console.log("Initializing GoogleSpreadsheet instance for the first time...");
+    if (GOOGLE_SERVICE_ACCOUNT_EMAIL && GOOGLE_PRIVATE_KEY && GOOGLE_SHEET_ID) {
+        try {
+            const serviceAccountAuth = new JWT({
+                email: GOOGLE_SERVICE_ACCOUNT_EMAIL,
+                key: GOOGLE_PRIVATE_KEY,
+                scopes: ["https://www.googleapis.com/auth/spreadsheets"],
+            });
+            const doc = new GoogleSpreadsheet(GOOGLE_SHEET_ID, serviceAccountAuth);
+            googleDoc = doc; 
+            console.log("GoogleSpreadsheet instance created successfully.");
+            return googleDoc;
+        } catch (error) {
+            console.error("Error creating JWT or GoogleSpreadsheet instance:", error);
+            throw new Error("Failed to initialize Google Sheets connection.");
+        }
+    } else {
+        console.warn("Warning: Core Google Sheets environment variables are missing.");
+        throw new Error("Google Sheets environment variables are not configured.");
+    }
+}
+
+let googleDoc = null;
+/*
 let googleDoc;
 if (GOOGLE_SERVICE_ACCOUNT_EMAIL && GOOGLE_PRIVATE_KEY && GOOGLE_SHEET_ID) {
   try {
@@ -543,6 +572,7 @@ if (GOOGLE_SERVICE_ACCOUNT_EMAIL && GOOGLE_PRIVATE_KEY && GOOGLE_SHEET_ID) {
     "Warning: Core Google Sheets environment variables are missing.",
   );
 }
+*/
 
 const client = new Client({
   intents: [
@@ -558,17 +588,9 @@ async function upsertRowByOrderValue(
   dataWithOrderAndProposal,
 ) {
   const logPrefix = `[Order #${orderValueToFind}]`;
-  if (!googleDoc) {
-    console.error(
-      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`,
-    );
-    return {
-      success: false,
-      action: "none",
-      message: "GoogleSpreadsheet instance not initialized.",
-    };
-  }
+  
   try {
+    const googleDoc = await getGoogleDoc();
     await withTimeout(googleDoc.loadInfo(), 30000);
     const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_MAIN];
     if (!sheet) {
@@ -635,17 +657,8 @@ async function upsertRowByOrderValue(
 
 async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
   const logPrefix = `[Thread: ${ooLinkKey}]`;
-  if (!googleDoc) {
-    console.error(
-      `${logPrefix} Error: GoogleSpreadsheet instance not initialized.`,
-    );
-    return {
-      success: false,
-      action: "none",
-      message: "GoogleSpreadsheet instance not initialized.",
-    };
-  }
   try {
+    const googleDoc = await getGoogleDoc();
     await googleDoc.loadInfo();
     const sheet = googleDoc.sheetsByTitle[WORKSHEET_TITLE_FINDOOR];
     if (!sheet) {
