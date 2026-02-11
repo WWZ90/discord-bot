@@ -3619,7 +3619,6 @@ client.on("interactionCreate", async (interaction) => {
 });
 
 async function initializeBot() {
-  await loadConfig();
   if (
     !DISCORD_TOKEN ||
     !GOOGLE_SHEET_ID ||
@@ -3629,45 +3628,27 @@ async function initializeBot() {
     console.error(`Critical env vars missing. Bot will not start.`);
     return;
   }
+  
   client.on("ready", () => {
     console.log(`${client.user.tag} has connected to Discord and is ready!`);
-    console.log(
-      `Initial auto-processing state: ${
-        botConfig.autoProcessingEnabled ? "Enabled" : "Disabled"
-      }`,
-    );
-    console.log(
-      `Initial processing interval: ${
-        botConfig.processingIntervalMs / 60000
-      } minutes`,
-    );
-
+    console.log(`Initial auto-processing state: ${botConfig.autoProcessingEnabled ? "Enabled" : "Disabled"}`);
+    
     if (botConfig.autoProcessingEnabled) {
-      console.log(
-        "Auto-processing is enabled. Performing an initial scan immediately upon startup.",
-      );
-      performMassScan();
+      console.log("Auto-processing is enabled. Performing an initial scan after a short delay.");
+      setTimeout(() => performMassScan(), 5000); 
     } else {
-      console.log(
-        "Auto-processing is initially disabled. No scan will run until enabled via command.",
-      );
+      console.log("Auto-processing is initially disabled.");
     }
-  });
 
-  cron.schedule("0 */4 * * *", () => {
-    console.log(
-      "[Cron] Triggering scheduled inactive thread archival routine.",
-    );
-    autoArchiveInactiveThreads();
-  });
-  console.log("Scheduled inactive thread archival to run every 4 hours.");
+    cron.schedule('0 */4 * * *', () => {
+        console.log("[Cron] Triggering scheduled inactive thread archival routine.");
+        autoArchiveThreads(); 
+    });
+    console.log("Scheduled inactive thread archival to run every 4 hours.");
 
-  setInterval(processFallbackQueue, FALLBACK_QUEUE_PROCESS_INTERVAL_MS);
-  console.log(
-    `[Supervisor] Fallback queue processor started. Checking every ${
-      FALLBACK_QUEUE_PROCESS_INTERVAL_MS / 1000
-    } seconds.`,
-  );
+    setInterval(processFallbackQueue, FALLBACK_QUEUE_PROCESS_INTERVAL_MS);
+    console.log(`[Supervisor] Fallback queue processor started. Checking every ${FALLBACK_QUEUE_PROCESS_INTERVAL_MS / 1000} seconds.`);
+  });
 
   client.login(DISCORD_TOKEN).catch((err) => {
     console.error("Failed to log into Discord:", err);
