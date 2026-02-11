@@ -2463,7 +2463,7 @@ client.on("messageCreate", async (message) => {
         "A critical error occurred during the backlog process. Check the logs.",
       );
     } finally {
-        isBacklogProcessRunning = false;
+      isBacklogProcessRunning = false;
     }
   } else if (commandName === "forcereprocess") {
     if (message.author.id !== "907390293316337724") {
@@ -2524,11 +2524,13 @@ client.on("messageCreate", async (message) => {
 
     try {
       if (isBacklogProcessRunning) {
-            return message.reply("⚠️ A backlog process is already running. Please wait for it to finish or use `!stopbacklog`.");
-        }
-      
+        return message.reply(
+          "⚠️ A backlog process is already running. Please wait for it to finish or use `!stopbacklog`.",
+        );
+      }
+
       isBacklogProcessRunning = true;
-      
+
       const parentChannel = await client.channels.fetch(
         FAILED_TICKETS_FORUM_ID,
       );
@@ -2574,7 +2576,7 @@ client.on("messageCreate", async (message) => {
       for (let i = 0; i < allThreads.length; i++) {
         if (!isBacklogProcessRunning) {
           await message.channel.send("Force reprocess stopped by user.");
-          break; 
+          break;
         }
         const thread = allThreads[i];
         const progress = `(${i + 1}/${allThreads.length})`;
@@ -2624,7 +2626,7 @@ client.on("messageCreate", async (message) => {
         "A critical error occurred during the forced reprocessing. Check the logs.",
       );
     } finally {
-        isBacklogProcessRunning = false;
+      isBacklogProcessRunning = false;
     }
   } else if (commandName === "archiveallthreads") {
     if (message.author.id !== "907390293316337724") {
@@ -3669,6 +3671,8 @@ async function initializeBot() {
     } seconds.`,
   );
 
+  console.log("TOKEN exists?", !!process.env.DISCORD_TOKEN);
+  console.log("TOKEN length:", process.env.DISCORD_TOKEN?.length);
   client.login(DISCORD_TOKEN).catch((err) => {
     console.error("Failed to log into Discord:", err);
     if (
