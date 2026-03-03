@@ -3791,7 +3791,7 @@ async function initializeBot() {
       );
     }
 
-    checkInactiveTicketsAndThreads();
+    checkInactiveTicketsAndThreads(); //init
 
     setInterval(checkInactiveTicketsAndThreads, 10 * 60 * 1000);
     console.log("Scheduled inactivity check to run every 10 minutes.");
