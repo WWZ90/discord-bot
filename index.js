@@ -112,6 +112,11 @@ const TICKET_TOOL_CLOSE_COMMAND_TEXT =
 const TICKET_TOOL_DELETE_COMMAND_TEXT =
   process.env.TICKET_TOOL_DELETE_COMMAND || "$delete";
 
+const VERIFIER_ROLE_ID = process.env.VERIFIER_ROLE_ID;
+const TRAINEE_ROLE_ID = process.env.TRAINEE_ROLE_ID;
+
+const alertedChannels = new Set();
+
 const DEFAULT_MIN_TICKET_AGE_MS = 2 * 60 * 60 * 1000 + 5 * 60 * 1000;
 const DEFAULT_PROCESSING_INTERVAL_MS = 5 * 60 * 1000;
 const DELAY_BETWEEN_TICKET_PROCESSING_MS =
@@ -1937,6 +1942,92 @@ async function performMassScan() {
   }
 }
 
+async function checkInactiveTicketsAndThreads() {
+    const logPrefix = "[Inactive-Check]";
+    console.log(`${logPrefix} Starting scan for inactive tickets and threads...`);
+
+    try {
+        const guild = client.guilds.cache.first();
+        if (!guild) {
+            console.log(`${logPrefix} Guild not found. Skipping scan.`);
+            return;
+        }
+
+        const now = Date.now();
+        const minAge = 1 * 60 * 60 * 1000; // 1 hora
+        const maxAge = 2 * 60 * 60 * 1000; // 2 horas
+
+        const channelsToCheck = [];
+
+        // 1. Obtener Tickets
+        for (const channel of guild.channels.cache.values()) {
+            if (channel.name.toLowerCase().startsWith("proposal-")) {
+                const age = now - channel.createdTimestamp;
+                if (age > minAge && age < maxAge) {
+                    channelsToCheck.push(channel);
+                }
+            }
+        }
+
+        // 2. Obtener Hilos Activos
+        const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID).catch(() => null);
+        if (parentChannel && parentChannel.type === ChannelType.GuildText) {
+            const activeThreads = await parentChannel.threads.fetchActive();
+            for (const thread of activeThreads.threads.values()) {
+                const age = now - thread.createdTimestamp;
+                if (age > minAge && age < maxAge) {
+                    channelsToCheck.push(thread);
+                }
+            }
+        }
+        
+        if (channelsToCheck.length === 0) {
+            console.log(`${logPrefix} No channels/threads found within the 1-2 hour age range.`);
+            return;
+        }
+
+        console.log(`${logPrefix} Found ${channelsToCheck.length} channels/threads to check for inactivity.`);
+        let alertsSent = 0;
+
+        for (const channel of channelsToCheck) {
+            // Si ya hemos alertado en este canal, lo saltamos
+            if (alertedChannels.has(channel.id)) {
+                continue;
+            }
+
+            try {
+                const messages = await channel.messages.fetch({ limit: 10 });
+                // Consideramos inactivo si tiene 1 o menos mensajes 
+                if (messages.size <= 1) {
+                    console.log(`${logPrefix} Channel ${channel.name} (${channel.id}) is inactive. Sending alert.`);
+                    
+                    const alertMessage = `🔔 This ${channel.isThread() ? "thread" : "ticket"} has been inactive for over an hour. Needs verification. <@&${VERIFIER_ROLE_ID}> <@&${TRAINEE_ROLE_ID}>`;
+                    
+                    await channel.send(alertMessage);
+                    alertedChannels.add(channel.id); // Marcamos como alertado
+                    alertsSent++;
+                    await new Promise(r => setTimeout(r, 1000)); // Pequeña pausa
+                }
+            } catch (err) {
+                console.warn(`${logPrefix} Could not process channel ${channel.name}. Error: ${err.message}`);
+                // Si el canal fue borrado mientras lo procesábamos, lo eliminamos de la lista de seguimiento
+                if (err.code === 10003) { // Unknown Channel
+                    alertedChannels.delete(channel.id);
+                }
+            }
+        }
+        
+        if(alertsSent > 0) {
+            console.log(`${logPrefix} Scan complete. Sent ${alertsSent} inactivity alerts.`);
+        } else {
+            console.log(`${logPrefix} Scan complete. No new inactive channels found.`);
+        }
+
+    } catch (error) {
+        console.error(`${logPrefix} A critical error occurred during the inactivity scan:`, error);
+    }
+}
+
 function scheduleNextScan() {
   if (scanTimeoutId) {
     clearTimeout(scanTimeoutId);
@@ -3655,6 +3746,9 @@ async function initializeBot() {
         "Auto-processing is initially disabled. No scan will run until enabled via command.",
       );
     }
+
+    setInterval(checkInactiveTicketsAndThreads, 20 * 60 * 1000); 
+    console.log("Scheduled inactivity check to run every 20 minutes.");
   });
 
   cron.schedule("0 */4 * * *", () => {
