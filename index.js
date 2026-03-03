@@ -1954,7 +1954,7 @@ async function checkInactiveTicketsAndThreads() {
         }
 
         const now = Date.now();
-        const minAge = 1 * 60 * 60 * 1000; // 1 hora
+        const minAge = 20 * 60 * 1000; // 20 minutos
         const maxAge = 2 * 60 * 60 * 1000; // 2 horas
 
         const channelsToCheck = [];
@@ -1982,7 +1982,7 @@ async function checkInactiveTicketsAndThreads() {
         }
         
         if (channelsToCheck.length === 0) {
-            console.log(`${logPrefix} No channels/threads found within the 1-2 hour age range.`);
+            console.log(`${logPrefix} No channels/threads found within the 20 mins - 2 hour age range.`);
             return;
         }
 
@@ -2001,7 +2001,7 @@ async function checkInactiveTicketsAndThreads() {
                 if (messages.size <= 1) {
                     console.log(`${logPrefix} Channel ${channel.name} (${channel.id}) is inactive. Sending alert.`);
                     
-                    const alertMessage = `🔔 This ${channel.isThread() ? "thread" : "ticket"} has been inactive for over an hour. Needs verification. <@&${VERIFIER_ROLE_ID}> <@&${TRAINEE_ROLE_ID}>`;
+                    const alertMessage = `🔔 This ${channel.isThread() ? "thread" : "ticket"} has been inactive for over 20 mins. Needs verification. <@&${VERIFIER_ROLE_ID}> <@&${TRAINEE_ROLE_ID}>`;
                     
                     await channel.send(alertMessage);
                     alertedChannels.add(channel.id); // Marcamos como alertado
@@ -3747,7 +3747,7 @@ async function initializeBot() {
       );
     }
 
-    setInterval(checkInactiveTicketsAndThreads, 20 * 60 * 1000); 
+    setInterval(checkInactiveTicketsAndThreads, 10 * 60 * 1000); 
     console.log("Scheduled inactivity check to run every 20 minutes.");
   });
 
