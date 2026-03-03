@@ -3748,7 +3748,7 @@ async function initializeBot() {
     }
 
     setInterval(checkInactiveTicketsAndThreads, 10 * 60 * 1000); 
-    console.log("Scheduled inactivity check to run every 20 minutes.");
+    console.log("Scheduled inactivity check to run every 10 minutes.");
   });
 
   cron.schedule("0 */4 * * *", () => {
