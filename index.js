@@ -1956,16 +1956,13 @@ async function checkInactiveTicketsAndThreads() {
     let cleanedCount = 0;
     const guild = client.guilds.cache.first();
     for (const channelId of alertedChannels) {
-      // Si el canal ya no existe en el caché del servidor, lo eliminamos
       if (guild && !guild.channels.cache.has(channelId)) {
         alertedChannels.delete(channelId);
         cleanedCount++;
       }
     }
     if (cleanedCount > 0) {
-      console.log(
-        `${logPrefix} Cleaned ${cleanedCount} deleted channels from the alert list.`,
-      );
+      console.log(`${logPrefix} Cleaned ${cleanedCount} deleted channels from the alert list.`);
     }
   }
 
@@ -1982,84 +1979,75 @@ async function checkInactiveTicketsAndThreads() {
     const minAge = 20 * 60 * 1000;
     const maxAge = 2 * 60 * 60 * 1000;
 
-    const inactiveChannels = []; // Lista para guardar los canales inactivos
+    const inactiveItems = []; 
 
-    // 1. Obtener y comprobar Tickets
     for (const channel of guild.channels.cache.values()) {
       if (channel.name.toLowerCase().startsWith("proposal-")) {
         const age = now - channel.createdTimestamp;
         if (age > minAge && age < maxAge && !alertedChannels.has(channel.id)) {
           const messages = await channel.messages.fetch({ limit: 5 });
           if (messages.size <= 1) {
-            inactiveChannels.push(channel);
+            inactiveItems.push({ channel: channel, name: channel.name });
           }
         }
       }
     }
 
-    // 2. Obtener y comprobar Hilos Activos
-    const parentChannel = await client.channels
-      .fetch(FAILED_TICKETS_FORUM_ID)
-      .catch(() => null);
+    const parentChannel = await client.channels.fetch(FAILED_TICKETS_FORUM_ID).catch(() => null);
     if (parentChannel && parentChannel.type === ChannelType.GuildText) {
       const activeThreads = await parentChannel.threads.fetchActive();
       for (const thread of activeThreads.threads.values()) {
         const age = now - thread.createdTimestamp;
         if (age > minAge && age < maxAge && !alertedChannels.has(thread.id)) {
-          const messages = await thread.messages.fetch({ limit: 5 });
-          if (messages.size <= 1) {
-            inactiveChannels.push(thread);
-          }
+           const messages = await thread.messages.fetch({ limit: 5 });
+           if (messages.size <= 1) {
+                let displayName = thread.name; 
+                try {
+                    const starterMessage = await thread.fetchStarterMessage();
+                    if (starterMessage && starterMessage.content) {
+                        const linkPosition = starterMessage.content.lastIndexOf('https://discord.com/channels/');
+                        if (linkPosition !== -1) {
+                            displayName = starterMessage.content.substring(0, linkPosition).trim();
+                        }
+                    }
+                } catch(e) {
+                    console.warn(`${logPrefix} Could not fetch starter message for thread ${thread.id}. Using default name.`);
+                }
+                inactiveItems.push({ channel: thread, name: displayName });
+           }
         }
       }
     }
 
-    if (inactiveChannels.length === 0) {
-      console.log(
-        `${logPrefix} Scan complete. No new inactive channels found.`,
-      );
+    if (inactiveItems.length === 0) {
+      console.log(`${logPrefix} Scan complete. No new inactive channels found.`);
       return;
     }
 
-    console.log(
-      `${logPrefix} Found ${inactiveChannels.length} inactive channels/threads. Sending summary alert.`,
-    );
-
-    // 3. Enviar el Resumen al Canal de Alertas
-    const alertChannel = await client.channels
-      .fetch(INACTIVITY_ALERT_CHANNEL_ID)
-      .catch(() => null);
+    console.log(`${logPrefix} Found ${inactiveItems.length} inactive channels/threads. Sending summary alert.`);
+    
+    const alertChannel = await client.channels.fetch(INACTIVITY_ALERT_CHANNEL_ID).catch(() => null);
     if (!alertChannel || !alertChannel.isTextBased()) {
-      console.error(
-        `${logPrefix} ERROR: Inactivity alert channel not found or is not a text channel.`,
-      );
+      console.error(`${logPrefix} ERROR: Inactivity alert channel not found.`);
       return;
     }
 
-    // Construir el mensaje de alerta
-    let alertMessage = `🔔 **The following tickets/threads have been inactive for over an hour and need verification:** <@&${VERIFIER_ROLE_ID}> <@&${TRAINEE_ROLE_ID}>\n\n`;
-
-    for (const channel of inactiveChannels) {
-      // Añadimos el enlace al canal/hilo a la lista
-      alertMessage += `- ${channel.toString()}\n`;
-      // Marcamos como alertado para no volver a notificarlo
-      alertedChannels.add(channel.id);
+    let alertMessage = `🔔 **The following tickets/threads have been inactive for over 20 minutes and need verification:** <@&${VERIFIER_ROLE_ID}> <@&${TRAINEE_ROLE_ID}>\n\n`;
+    
+    for (const item of inactiveItems) {
+      alertMessage += `- [${item.name}](${item.channel.url})\n`;
+      alertedChannels.add(item.channel.id);
     }
 
-    // Discord tiene un límite de 2000 caracteres por mensaje. Si la lista es enorme, la dividimos.
     const messageChunks = alertMessage.match(/[\s\S]{1,1900}/g) || [];
     for (const chunk of messageChunks) {
       await alertChannel.send(chunk);
     }
 
-    console.log(
-      `${logPrefix} Scan complete. Sent summary alert for ${inactiveChannels.length} items.`,
-    );
+    console.log(`${logPrefix} Scan complete. Sent summary alert for ${inactiveItems.length} items.`);
+
   } catch (error) {
-    console.error(
-      `${logPrefix} A critical error occurred during the inactivity scan:`,
-      error,
-    );
+    console.error(`${logPrefix} A critical error occurred during the inactivity scan:`, error);
   }
 }
 
