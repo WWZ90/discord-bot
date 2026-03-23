@@ -189,6 +189,17 @@ const statsCommand = new SlashCommandBuilder()
       ),
   )
   .addSubcommand((subcommand) =>
+  subcommand
+    .setName("toggle_moov2_filter")
+    .setDescription("Enable or disable the MOOV2 fallback ticket filter.")
+    .addBooleanOption((option) =>
+      option
+        .setName("enabled")
+        .setDescription("Set to true to ignore MOOV2 proposals, false to allow them.")
+        .setRequired(true),
+    ),
+  )
+  .addSubcommand((subcommand) =>
     subcommand
       .setName("pending_tickets_queue")
       .setDescription(

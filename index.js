@@ -13,6 +13,8 @@ const cron = require("node-cron");
 const fs = require("fs").promises;
 const path = require("path");
 
+const { JsonRpcProvider } = require("ethers");
+
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const PREFIX = process.env.COMMAND_PREFIX || "!";
 const GOOGLE_SHEET_ID = process.env.GOOGLE_SHEET_ID;
@@ -129,6 +131,7 @@ let botConfig = {
     (process.env.ENABLE_AUTO_PROCESSING || "true").toLowerCase() === "true",
   currentPostProcessingAction: process.env.DEFAULT_TICKET_POST_ACTION || "none",
   autoSetPaidToN: true,
+  moov2FilterEnabled: true,
   minTicketAgeForProcessing: DEFAULT_MIN_TICKET_AGE_MS,
   processingIntervalMs: DEFAULT_PROCESSING_INTERVAL_MS,
   errorNotificationUserID: process.env.DEFAULT_ERROR_USER_ID || null,
@@ -141,6 +144,20 @@ let isBacklogProcessRunning = false;
 let scanTimeoutId = null;
 
 const blockTypes = ["polymarket", "snapshot", "disputed", "assertion"];
+
+const POLYGON_RPC_PROVIDER = new JsonRpcProvider("https://polygon.drpc.org");
+const MOOV2_ADDRESS = "0x2c0367a9db231ddebd88a94b4f6461a6e47c58b1";
+
+async function isMoov2Proposal(txHash, eventIndex) {
+  try {
+    const receipt = await POLYGON_RPC_PROVIDER.getTransactionReceipt(txHash);
+    const emitter = receipt?.logs.find((log) => log.index === parseInt(eventIndex))?.address;
+    return emitter?.toLowerCase() === MOOV2_ADDRESS;
+  } catch (err) {
+    console.error(`[MOOV2 Check] RPC call failed for tx ${txHash}:`, err.message);
+    return false; 
+  }
+}
 
 const LINK_REGEX = new RegExp(
   /(https:\/\/(?:oracle\.uma\.xyz|snapshot\.org|snapshot\.xyz)\/[^\s<>()'"]+)/,
@@ -469,6 +486,12 @@ async function loadConfig() {
       (val) => typeof val === "number",
     );
 
+    applyOrDefault(
+      "moov2FilterEnabled",
+      false,
+      (val) => typeof val === "boolean",
+    );
+
     if (loadedConfig.scanInterval !== undefined) changedDuringLoad = true;
 
     console.log("Configuration loaded from bot_config.json.");
@@ -511,6 +534,7 @@ async function saveConfig(logFullObject = true) {
       currentPostProcessingAction: botConfig.currentPostProcessingAction,
       minTicketAgeForProcessing: botConfig.minTicketAgeForProcessing,
       autoSetPaidToN: botConfig.autoSetPaidToN,
+      moov2FilterEnabled: botConfig.moov2FilterEnabled,
       processingIntervalMs: botConfig.processingIntervalMs,
       errorNotificationUserID: botConfig.errorNotificationUserID,
       lastSuccessfulScanTimestamp: botConfig.lastSuccessfulScanTimestamp,
@@ -2118,6 +2142,17 @@ client.on("messageCreate", async (message) => {
         const uniqueId = `${transactionHash}-${eventIndex}`;
         const marketTitle = titleMatch[1].trim();
 
+        const chainIdMatch = marketLink.match(/chainId=(\d+)/);
+        const chainId = chainIdMatch ? parseInt(chainIdMatch[1]) : null;
+
+        if (chainId === 137 && botConfig.moov2FilterEnabled) {
+          const isMoov2 = await isMoov2Proposal(transactionHash, parseInt(eventIndex));
+          if (isMoov2) {
+            console.log(`${logPrefix} Proposal "${marketTitle}" originates from MOOV2. Ignoring.`);
+            return;
+          }
+        }
+
         let alreadyVerifiedByOTB = false;
 
         if (otbVerifiedCache.has(uniqueId)) {
@@ -3364,7 +3399,7 @@ async function processFallbackQueue() {
           `[Supervisor] Attempting to create fallback thread for "${item.title}"...`,
         );
 
-        const threadName = `This ticket did not create after 25 mins`;
+        const threadName = `This ticket did not create after ${MIN_AGE_FOR_FALLBACK_CHECK_MS / 60000} mins`;
 
         const starterMessageContent = `${item.title} ${item.messageLink}`;
 
@@ -3615,6 +3650,7 @@ client.on("interactionCreate", async (interaction) => {
           `- Next Scan: ${nextScanInfo}\n` +
           `- Default Post Processing Action: **${botConfig.currentPostProcessingAction}**\n` +
           `- Automatic "Paid?" to "N" is **${botConfig.autoSetPaidToN}**\n` +
+          `- MOOV2 Filter: **${botConfig.moov2FilterEnabled ? "Enabled" : "Disabled"}**\n` +
           `- Min Ticket Age for Auto-Processing: **${ageM} minutes**\n` +
           `- Error Notification User: **${errU}**`,
         flags: MessageFlags.Ephemeral,
@@ -3737,6 +3773,16 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
     }
+  } else if (subCommand === "toggle_moov2_filter") {
+    const newState = interaction.options.getBoolean("enabled");
+    if (botConfig.moov2FilterEnabled !== newState) {
+      botConfig.moov2FilterEnabled = newState;
+      configChanged = true;
+    }
+    await interaction.reply({
+      content: `✅ MOOV2 filter is now **${newState ? "ENABLED (ignoring MOOV2 proposals)" : "DISABLED (allowing MOOV2 proposals)"}**.`,
+      flags: MessageFlags.Ephemeral,
+    });
   }
 });
 
@@ -3802,6 +3848,24 @@ async function initializeBot() {
 
   console.log("TOKEN exists?", !!process.env.DISCORD_TOKEN);
   console.log("TOKEN length:", process.env.DISCORD_TOKEN?.length);
+
+  // --- TEST MOOV2 ---
+  const testUrl = "https://oracle.uma.xyz/propose?project=Polymarket&oracleType=Optimistic+Oracle+V2&transactionHash=0x9518f6e1c56d8befadc9671859850efa7232f19ac6a1aedbbd8a910212b80ac5&eventIndex=3253&chainId=137";
+  const testTxHash = testUrl.match(/transactionHash=([^&]+)/)?.[1];
+  const testEventIndex = parseInt(testUrl.match(/eventIndex=(\d+)/)?.[1]);
+  const testChainId = parseInt(testUrl.match(/chainId=(\d+)/)?.[1]);
+
+  console.log(`[MOOV2 Test] TX: ${testTxHash} | EventIndex: ${testEventIndex} | ChainId: ${testChainId}`);
+
+  if (testChainId === 137) {
+    isMoov2Proposal(testTxHash, testEventIndex).then((result) => {
+      console.log(`[MOOV2 Test] Result: ${result ? "✅ IS MOOV2 — would be ignored" : "❌ NOT MOOV2 — would be queued"}`);
+    }).catch((err) => {
+      console.error(`[MOOV2 Test] RPC call failed:`, err.message);
+    });
+  }
+  // --- END TEST ---
+
   client.login(DISCORD_TOKEN).catch((err) => {
     console.error("Failed to log into Discord:", err);
     if (
