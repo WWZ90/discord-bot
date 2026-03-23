@@ -100,6 +100,17 @@ const configCommand = new SlashCommandBuilder()
       ),
   )
   .addSubcommand((subcommand) =>
+  subcommand
+    .setName("toggle_moov2_filter")
+    .setDescription("Enable or disable the MOOV2 fallback ticket filter.")
+    .addBooleanOption((option) =>
+      option
+        .setName("enabled")
+        .setDescription("Set to true to ignore MOOV2 proposals, false to allow them.")
+        .setRequired(true),
+    ),
+  )
+  .addSubcommand((subcommand) =>
     subcommand
       .setName("view_settings")
       .setDescription("View the current bot configuration for this server."),
@@ -187,17 +198,6 @@ const statsCommand = new SlashCommandBuilder()
           .setDescription("Optional: The order # to end counting at.")
           .setRequired(false),
       ),
-  )
-  .addSubcommand((subcommand) =>
-  subcommand
-    .setName("toggle_moov2_filter")
-    .setDescription("Enable or disable the MOOV2 fallback ticket filter.")
-    .addBooleanOption((option) =>
-      option
-        .setName("enabled")
-        .setDescription("Set to true to ignore MOOV2 proposals, false to allow them.")
-        .setRequired(true),
-    ),
   )
   .addSubcommand((subcommand) =>
     subcommand

@@ -3614,6 +3614,16 @@ client.on("interactionCreate", async (interaction) => {
           flags: MessageFlags.Ephemeral,
         });
       }
+    } else if (subCommand === "toggle_moov2_filter") {
+      const newState = interaction.options.getBoolean("enabled");
+      if (botConfig.moov2FilterEnabled !== newState) {
+        botConfig.moov2FilterEnabled = newState;
+        configChanged = true;
+      }
+      await interaction.reply({
+        content: `✅ MOOV2 filter is now **${newState ? "ENABLED (ignoring MOOV2 proposals)" : "DISABLED (allowing MOOV2 proposals)"}**.`,
+        flags: MessageFlags.Ephemeral,
+      });
     } else if (subCommand === "view_settings") {
       const ageM = Math.round(botConfig.minTicketAgeForProcessing / 60000);
       const procIntM = Math.round(botConfig.processingIntervalMs / 60000);
@@ -3773,17 +3783,7 @@ client.on("interactionCreate", async (interaction) => {
         });
       }
     }
-  } else if (subCommand === "toggle_moov2_filter") {
-    const newState = interaction.options.getBoolean("enabled");
-    if (botConfig.moov2FilterEnabled !== newState) {
-      botConfig.moov2FilterEnabled = newState;
-      configChanged = true;
-    }
-    await interaction.reply({
-      content: `✅ MOOV2 filter is now **${newState ? "ENABLED (ignoring MOOV2 proposals)" : "DISABLED (allowing MOOV2 proposals)"}**.`,
-      flags: MessageFlags.Ephemeral,
-    });
-  }
+  } 
 });
 
 async function initializeBot() {
