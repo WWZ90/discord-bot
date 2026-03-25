@@ -2398,8 +2398,8 @@ client.on("messageCreate", async (message) => {
       }
     }
   } else if (commandName === "processthreads") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     const dateString = args[0];
@@ -2621,8 +2621,8 @@ client.on("messageCreate", async (message) => {
       isBacklogProcessRunning = false;
     }
   } else if (commandName === "forcereprocess") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     const dateString = args[0];
@@ -2784,8 +2784,8 @@ client.on("messageCreate", async (message) => {
       isBacklogProcessRunning = false;
     }
   } else if (commandName === "archiveallthreads") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     const dateString = args[0];
@@ -2881,8 +2881,8 @@ client.on("messageCreate", async (message) => {
     }
   } else if (commandName === "unarchive") {
     // --- RESTRICCIÓN DE ACCESO ---
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     const dateString = args[0];
@@ -2974,8 +2974,8 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "findduplicates") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     await message.reply(
@@ -3051,8 +3051,8 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "fixduplicates") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     if (args[0] !== "confirm") {
@@ -3149,8 +3149,8 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "stopbacklog") {
-    if (message.author.id !== "907390293316337724") {
-      return message.reply("⛔ This command is restricted to the bot owner.");
+    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+      return message.reply("⛔ This command requires Administrator permissions.");
     }
 
     if (isBacklogProcessRunning) {
@@ -3552,13 +3552,6 @@ client.on("interactionCreate", async (interaction) => {
           flags: MessageFlags.Ephemeral,
         });
     } else if (subCommand === "toggle_paid_column") {
-      if (interaction.user.id !== "907390293316337724") {
-        return interaction.reply({
-          content: "⛔ This subcommand is restricted to the bot owner.",
-          ephemeral: true,
-        });
-      }
-
       const newState = interaction.options.getBoolean("enabled");
       if (botConfig.autoSetPaidToN !== newState) {
         botConfig.autoSetPaidToN = newState;
