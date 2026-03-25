@@ -3514,7 +3514,7 @@ client.on("interactionCreate", async (interaction) => {
         configChanged = true;
         if (botConfig.autoProcessingEnabled) {
           console.log(
-            "Auto-processing enabled by command. Ensuring next scan is scheduled.",
+            "Auto-processing enabled by command. Ensuring next scan is scheduled.", 
           );
           isMassScanInProgress = false;
           clearTimeout(scanTimeoutId);
