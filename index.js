@@ -2407,7 +2407,7 @@ client.on("messageCreate", async (message) => {
       }
     }
   } else if (commandName === "processthreads") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
@@ -2630,7 +2630,7 @@ client.on("messageCreate", async (message) => {
       isBacklogProcessRunning = false;
     }
   } else if (commandName === "forcereprocess") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
@@ -2793,9 +2793,9 @@ client.on("messageCreate", async (message) => {
       isBacklogProcessRunning = false;
     }
   } else if (commandName === "archiveallthreads") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-      return message.reply("⛔ This command requires Administrator permissions.");
-    }
+      if (!hasAccess(message.member)) {
+        return message.reply("⛔ This command requires Administrator permissions.");
+      }
 
     const dateString = args[0];
     const timeString = args[1];
@@ -2890,7 +2890,7 @@ client.on("messageCreate", async (message) => {
     }
   } else if (commandName === "unarchive") {
     // --- RESTRICCIÓN DE ACCESO ---
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
@@ -2983,7 +2983,7 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "findduplicates") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
@@ -3060,7 +3060,7 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "fixduplicates") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
@@ -3158,7 +3158,7 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "stopbacklog") {
-    if (!message.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
+    if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
 
