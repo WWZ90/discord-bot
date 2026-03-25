@@ -19,7 +19,7 @@ if (!BOT_ID || !DISCORD_TOKEN) {
 const configCommand = new SlashCommandBuilder()
   .setName("config")
   .setDescription("Configure bot settings for this server.")
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
+  .setDefaultMemberPermissions(null)
   .addSubcommand((subcommand) =>
     subcommand
       .setName("set_processing_interval")
@@ -119,12 +119,12 @@ const configCommand = new SlashCommandBuilder()
 const scanStatusCommand = new SlashCommandBuilder()
   .setName("scan_status")
   .setDescription("Shows when the next automatic ticket scan is scheduled.")
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator);
+  .setDefaultMemberPermissions(null);
 
 const statsCommand = new SlashCommandBuilder()
   .setName("stats")
   .setDescription("Get statistics from the processed data.")
-  .setDefaultMemberPermissions(PermissionsBitField.Flags.ManageMessages)
+  .setDefaultMemberPermissions(null)
   .addSubcommand((subcommand) =>
     subcommand
       .setName("closers")

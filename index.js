@@ -163,6 +163,15 @@ const LINK_REGEX = new RegExp(
   /(https:\/\/(?:oracle\.uma\.xyz|snapshot\.org|snapshot\.xyz)\/[^\s<>()'"]+)/,
 );
 
+const RISK_LABS_ROLE_ID = "1123485195694256158";
+
+function hasAccess(member) {
+  return (
+    member.permissions.has(PermissionsBitField.Flags.Administrator) ||
+    member.roles.cache.has(RISK_LABS_ROLE_ID)
+  );
+}
+
 function findValidLinkIn(text) {
   if (!text) return null;
   const match = text.match(LINK_REGEX);
@@ -3485,11 +3494,7 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
     const subCommand = interaction.options.getSubcommand();
-    if (
-      !interaction.memberPermissions.has(
-        PermissionsBitField.Flags.Administrator,
-      )
-    ) {
+    if (!hasAccess(interaction.member)) {
       return interaction.reply({
         content: "Admin only.",
         flags: MessageFlags.Ephemeral,
@@ -3667,11 +3672,7 @@ client.on("interactionCreate", async (interaction) => {
       await saveConfig(false);
     }
   } else if (commandName === "scan_status") {
-    if (
-      !interaction.member.permissions.has(
-        PermissionsBitField.Flags.ManageMessages,
-      )
-    ) {
+    if (!hasAccess(interaction.member)) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
         flags: MessageFlags.Ephemeral,
@@ -3710,11 +3711,7 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
   } else if (commandName === "stats") {
-    if (
-      !interaction.memberPermissions.has(
-        PermissionsBitField.Flags.ManageMessages,
-      )
-    ) {
+    if (!hasAccess(interaction.member)) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
         flags: MessageFlags.Ephemeral,
