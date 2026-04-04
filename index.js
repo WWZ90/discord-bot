@@ -2198,83 +2198,9 @@ function scheduleNextScan() {
 
 client.on("messageCreate", async (message) => {
 
-  if (message.author.bot) return;
-
   // =====================================================================
-  // START: DISPUTE THREADS MONITOR (REAL-TIME + ANTI-REPOSTING)
+  // BOT MESSAGE HANDLERS (must run before the bot-message filter below)
   // =====================================================================
-  if (message.channel.isThread() && message.channel.parentId === DISPUTE_THREADS_CHANNEL_ID) {
-    const threadAge = Date.now() - message.channel.createdTimestamp;
-    
-    // Only analyze threads up to 4 days old
-    if (threadAge <= FOUR_DAYS_IN_MS) {
-      const threadId = message.channel.id;
-      const userId = message.author.id;
-      let ruleBroken = null;
-
-      // A. Initialize cache for this thread if it doesn't exist
-      if (!disputeParticipationCache.has(threadId)) {
-        disputeParticipationCache.set(threadId, new Set());
-        
-        // Rebuild memory in case of a recent Railway restart
-        try {
-          const pastMessages = await message.channel.messages.fetch({ limit: 100 });
-          pastMessages.forEach(m => {
-            if (!m.author.bot && m.id !== message.id) {
-              disputeParticipationCache.get(threadId).add(m.author.id);
-            }
-          });
-        } catch (e) {
-          console.error("[Dispute Monitor] Error initializing cache:", e);
-        }
-      }
-
-      const participants = disputeParticipationCache.get(threadId);
-
-      if (message.type === 19 || message.reference) {
-        ruleBroken = "No replies (User is replying to another message)";
-      } else if (participants.has(userId)) {
-          ruleBroken = "One message / Reposting (User already participated in this thread)";
-      }
-
-      // C. Register user in cache, regardless of violations
-      participants.add(userId);
-
-      // D. Send alert to verifiers channel
-      if (ruleBroken) {
-        try {
-          const alertsChannel = await client.channels.fetch(VERIFIERS_ALERTS_CHANNEL_ID);
-          if (alertsChannel) {
-            await alertsChannel.send({
-              content: `🚨 **Violation detected in Dispute Threads**\n**User:** ${message.author.tag} (<@${userId}>)\n**Thread:** <#${threadId}>\n**Rule Broken:** \`${ruleBroken}\`\n**Message Link:** ${message.url}`
-            });
-          }
-
-          const discussionChannel = await client.channels.fetch(VOTING_DISCUSSION_CHANNEL_ID);
-          if (discussionChannel) {
-            await discussionChannel.send({
-              content: `Hey <@${userId}>, you just violated a rule in the <#${threadId}> dispute thread.\n**Rule Broken:** \`${ruleBroken}\`\n*Please remember that dispute threads have strict participation rules.*`
-            });
-          }
-        } catch (error) {
-          console.error("[Dispute Monitor] Error sending alert:", error);
-        }
-      }
-    }
-  }
-  // =====================================================================
-  // FIN: MONITOR DE DISPUTE THREADS
-  // =====================================================================
-
-  if (alertedChannels.has(message.channel.id)) {
-    if (message.author.id !== client.user.id) {
-      alertedChannels.delete(message.channel.id);
-      console.log(
-        `[Inactive-Check] Channel ${message.channel.name} is now active. Removed from alert list.`,
-      );
-    }
-  }
-
   if (message.channel.id === OO_LIVE_FEED_CHANNEL_ID && message.author.bot) {
     const logPrefix = `[Supervisor][oo-live-feed]`;
 
@@ -2469,6 +2395,86 @@ client.on("messageCreate", async (message) => {
       }
     }
     return;
+  }
+  // =====================================================================
+  // FIN: BOT MESSAGE HANDLERS
+  // =====================================================================
+
+  if (message.author.bot) return;
+
+  // =====================================================================
+  // START: DISPUTE THREADS MONITOR (REAL-TIME + ANTI-REPOSTING)
+  // =====================================================================
+  if (message.channel.isThread() && message.channel.parentId === DISPUTE_THREADS_CHANNEL_ID) {
+    const threadAge = Date.now() - message.channel.createdTimestamp;
+    
+    // Only analyze threads up to 4 days old
+    if (threadAge <= FOUR_DAYS_IN_MS) {
+      const threadId = message.channel.id;
+      const userId = message.author.id;
+      let ruleBroken = null;
+
+      // A. Initialize cache for this thread if it doesn't exist
+      if (!disputeParticipationCache.has(threadId)) {
+        disputeParticipationCache.set(threadId, new Set());
+        
+        // Rebuild memory in case of a recent Railway restart
+        try {
+          const pastMessages = await message.channel.messages.fetch({ limit: 100 });
+          pastMessages.forEach(m => {
+            if (!m.author.bot && m.id !== message.id) {
+              disputeParticipationCache.get(threadId).add(m.author.id);
+            }
+          });
+        } catch (e) {
+          console.error("[Dispute Monitor] Error initializing cache:", e);
+        }
+      }
+
+      const participants = disputeParticipationCache.get(threadId);
+
+      if (message.type === 19 || message.reference) {
+        ruleBroken = "No replies (User is replying to another message)";
+      } else if (participants.has(userId)) {
+          ruleBroken = "One message / Reposting (User already participated in this thread)";
+      }
+
+      // C. Register user in cache, regardless of violations
+      participants.add(userId);
+
+      // D. Send alert to verifiers channel
+      if (ruleBroken) {
+        try {
+          const alertsChannel = await client.channels.fetch(VERIFIERS_ALERTS_CHANNEL_ID);
+          if (alertsChannel) {
+            await alertsChannel.send({
+              content: `🚨 **Violation detected in Dispute Threads**\n**User:** ${message.author.tag} (<@${userId}>)\n**Thread:** <#${threadId}>\n**Rule Broken:** \`${ruleBroken}\`\n**Message Link:** ${message.url}`
+            });
+          }
+
+          const discussionChannel = await client.channels.fetch(VOTING_DISCUSSION_CHANNEL_ID);
+          if (discussionChannel) {
+            await discussionChannel.send({
+              content: `Hey <@${userId}>, you just violated a rule in the <#${threadId}> dispute thread.\n**Rule Broken:** \`${ruleBroken}\`\n*Please remember that dispute threads have strict participation rules.*`
+            });
+          }
+        } catch (error) {
+          console.error("[Dispute Monitor] Error sending alert:", error);
+        }
+      }
+    }
+  }
+  // =====================================================================
+  // FIN: MONITOR DE DISPUTE THREADS
+  // =====================================================================
+
+  if (alertedChannels.has(message.channel.id)) {
+    if (message.author.id !== client.user.id) {
+      alertedChannels.delete(message.channel.id);
+      console.log(
+        `[Inactive-Check] Channel ${message.channel.name} is now active. Removed from alert list.`,
+      );
+    }
   }
 
   if (message.author.bot && message.author.id !== client.user.id) return;
