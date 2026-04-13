@@ -855,6 +855,7 @@ async function upsertRowByOoLink(ooLinkKey, dataToUpsert) {
 }
 
 async function autoArchiveInactiveThreads() {
+  return; // Disabled — verification team shut down
   const logPrefix = "[Auto-Archive]";
   console.log(`${logPrefix} Starting routine to archive inactive threads...`);
 
@@ -932,6 +933,7 @@ async function processTicketChannel(
   initiatedBy = "Automatic Scan",
   recordType = "standard",
 ) {
+  return; // Disabled — verification team shut down
   const logPrefix = `[${channel.id} | ${channel.name}]`;
   console.log(
     `${logPrefix} Starting processing. Initiated by: ${initiatedBy}, Type: ${recordType}`,
@@ -1436,6 +1438,7 @@ async function processThread(
   initiatedByDisplayName,
   recordType = "standard",
 ) {
+  return; // Disabled — verification team shut down
   const logPrefix = `[Thread: ${threadChannel.name} (${threadChannel.id})]`;
   console.log(
     `${logPrefix} Starting processing. Initiated by: ${initiatedByDisplayName}, Type: ${recordType}`,
@@ -1926,6 +1929,7 @@ async function processThread(
 }
 
 async function performMassScan() {
+  return; // Disabled — verification team shut down
   if (!botConfig.autoProcessingEnabled) {
     console.log(
       `[${new Date().toISOString()}] Auto-processing is disabled. Scan skipped.`,
@@ -2077,6 +2081,7 @@ async function performMassScan() {
 }
 
 async function checkInactiveTicketsAndThreads() {
+  return; // Disabled — verification team shut down
   const logPrefix = "[Inactive-Check]";
 
   if (alertedChannels.size > 0) {
@@ -2179,6 +2184,7 @@ async function checkInactiveTicketsAndThreads() {
 }
 
 function scheduleNextScan() {
+  return; // Disabled — verification team shut down
   if (scanTimeoutId) {
     clearTimeout(scanTimeoutId);
   }
@@ -2202,6 +2208,7 @@ client.on("messageCreate", async (message) => {
   // BOT MESSAGE HANDLERS (must run before the bot-message filter below)
   // =====================================================================
   if (message.channel.id === OO_LIVE_FEED_CHANNEL_ID && message.author.bot) {
+    return; // Disabled — verification team shut down
     const logPrefix = `[Supervisor][oo-live-feed]`;
 
     let marketLink = null;
@@ -2311,6 +2318,7 @@ client.on("messageCreate", async (message) => {
     message.channel.id === OTB_VERIFICATIONS_CHANNEL_ID &&
     message.author.id === OTB_BOT_USER_ID
   ) {
+    return; // Disabled — verification team shut down
     const logPrefix = `[Supervisor][OTBV2]`;
     console.log(`${logPrefix} Detected a new message from OTB Bot.`);
 
@@ -2483,6 +2491,7 @@ client.on("messageCreate", async (message) => {
   const commandName = args.shift().toLowerCase();
 
   if (commandName === "record") {
+    return; // Disabled — verification team shut down
     if (
       !message.member.permissions.has(PermissionsBitField.Flags.ManageMessages)
     )
@@ -2511,6 +2520,7 @@ client.on("messageCreate", async (message) => {
     );
     await processTicketChannel(message.channel, initiatedByString, recordType);
   } else if (commandName === "recordt") {
+    return; // Disabled — verification team shut down
     if (!message.channel.isThread()) {
       await message.reply(
         "Error: !recordt is just for using on threads... Use !record instead",
@@ -2576,6 +2586,7 @@ client.on("messageCreate", async (message) => {
       }
     }
   } else if (commandName === "processthreads") {
+    return; // Disabled — verification team shut down
     if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
@@ -2799,6 +2810,7 @@ client.on("messageCreate", async (message) => {
       isBacklogProcessRunning = false;
     }
   } else if (commandName === "forcereprocess") {
+    return; // Disabled — verification team shut down
     if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
@@ -3327,6 +3339,7 @@ client.on("messageCreate", async (message) => {
       );
     }
   } else if (commandName === "stopbacklog") {
+    return; // Disabled — verification team shut down
     if (!hasAccess(message.member)) {
       return message.reply("⛔ This command requires Administrator permissions.");
     }
@@ -3346,6 +3359,7 @@ client.on("messageCreate", async (message) => {
 });
 
 client.on("channelCreate", async (channel) => {
+  return; // Disabled — verification team shut down
   if (channel.name.toLowerCase().startsWith("proposal-")) {
     lastTicketToolActivityTimestamp = Date.now();
     const logPrefix = `[Supervisor][${channel.name}]`;
@@ -3436,6 +3450,7 @@ client.on("channelCreate", async (channel) => {
 });
 
 async function processFallbackQueue() {
+  return; // Disabled — verification team shut down
   if (createdFallbackThreads.size > 0) {
     const now = Date.now();
     let cleanedCount = 0;
@@ -3656,6 +3671,7 @@ client.on("interactionCreate", async (interaction) => {
   if (!interaction.isChatInputCommand() || !interaction.inGuild()) return;
   const { commandName } = interaction;
   if (commandName === "config") {
+    return interaction.reply({ content: "This command has been disabled.", flags: MessageFlags.Ephemeral }); // Disabled — verification team shut down
     if (typeof botConfig === "undefined" || typeof saveConfig === "undefined") {
       return interaction.reply({
         content: "Config error.",
@@ -3841,6 +3857,7 @@ client.on("interactionCreate", async (interaction) => {
       await saveConfig(false);
     }
   } else if (commandName === "scan_status") {
+    return interaction.reply({ content: "This command has been disabled.", flags: MessageFlags.Ephemeral }); // Disabled — verification team shut down
     if (!hasAccess(interaction.member)) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
@@ -3880,6 +3897,7 @@ client.on("interactionCreate", async (interaction) => {
       });
     }
   } else if (commandName === "stats") {
+    return interaction.reply({ content: "This command has been disabled.", flags: MessageFlags.Ephemeral }); // Disabled — verification team shut down
     if (!hasAccess(interaction.member)) {
       return interaction.reply({
         content: "You do not have sufficient permissions.",
@@ -3973,41 +3991,16 @@ async function initializeBot() {
       } minutes`,
     );
 
-    if (botConfig.autoProcessingEnabled) {
-      console.log(
-        "Auto-processing is enabled. Performing an initial scan immediately upon startup.",
-      );
-      performMassScan();
-    } else {
-      console.log(
-        "Auto-processing is initially disabled. No scan will run until enabled via command.",
-      );
-    }
-
-    checkInactiveTicketsAndThreads(); //init
+    // Disabled — verification team shut down
+    // performMassScan(), checkInactiveTicketsAndThreads(), and their intervals are no longer needed
 
     runInitialDisputeScan();
 
     setInterval(cleanupDisputeCache, 12 * 60 * 60 * 1000);
-
-    setInterval(checkInactiveTicketsAndThreads, 10 * 60 * 1000);
-    console.log("Scheduled inactivity check to run every 10 minutes.");
   });
 
-  cron.schedule("0 */4 * * *", () => {
-    console.log(
-      "[Cron] Triggering scheduled inactive thread archival routine.",
-    );
-    autoArchiveInactiveThreads();
-  });
-  console.log("Scheduled inactive thread archival to run every 4 hours.");
-
-  setInterval(processFallbackQueue, FALLBACK_QUEUE_PROCESS_INTERVAL_MS);
-  console.log(
-    `[Supervisor] Fallback queue processor started. Checking every ${
-      FALLBACK_QUEUE_PROCESS_INTERVAL_MS / 1000
-    } seconds.`,
-  );
+  // Disabled — verification team shut down
+  // cron.schedule for autoArchiveInactiveThreads and setInterval for processFallbackQueue are no longer needed
 
   console.log("TOKEN exists?", !!process.env.DISCORD_TOKEN);
   console.log("TOKEN length:", process.env.DISCORD_TOKEN?.length);
