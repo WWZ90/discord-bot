@@ -287,7 +287,62 @@ function start(client) {
 
   app.get("/api/leaderboard", requireAuth, async (req, res, next) => {
     try {
-      res.json({ leaderboard: await pr.getLeaderboard(50) });
+      const leaderboard = await pr.getLeaderboard(50);
+      const ids = leaderboard.map((r) => r.userId);
+      const flags = ids.length
+        ? await db.query(`SELECT * FROM user_flags WHERE discord_user_id = ANY($1)`, [ids])
+        : { rows: [] };
+      const flagsById = Object.fromEntries(flags.rows.map((f) => [f.discord_user_id, f]));
+      res.json({
+        leaderboard: leaderboard.map((r) => ({
+          ...r,
+          flags: flagsById[r.userId] || {
+            contacted: false,
+            whitelisted: false,
+            wallet: null,
+            note: null,
+          },
+        })),
+      });
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Whitelist workflow tracking (dashboard-only). Upserts the user's flags.
+  app.put("/api/users/:userId/flags", requireAuth, async (req, res, next) => {
+    try {
+      const userId = String(req.params.userId);
+      if (!/^\d{5,25}$/.test(userId)) {
+        return res.status(400).json({ error: "Invalid user id." });
+      }
+      const { contacted, whitelisted, wallet, note, username } = req.body || {};
+      if (wallet && !/^0x[a-fA-F0-9]{40}$/.test(String(wallet).trim())) {
+        return res.status(400).json({ error: "Wallet must be a valid EVM address (0x + 40 hex chars)." });
+      }
+      const result = await db.query(
+        `INSERT INTO user_flags (discord_user_id, username, contacted, whitelisted, wallet, note, updated_at)
+         VALUES ($1, $2, COALESCE($3, FALSE), COALESCE($4, FALSE), $5, $6, now())
+         ON CONFLICT (discord_user_id) DO UPDATE SET
+           username = COALESCE(EXCLUDED.username, user_flags.username),
+           contacted = COALESCE($3, user_flags.contacted),
+           whitelisted = COALESCE($4, user_flags.whitelisted),
+           wallet = CASE WHEN $7 THEN $5 ELSE user_flags.wallet END,
+           note = CASE WHEN $8 THEN $6 ELSE user_flags.note END,
+           updated_at = now()
+         RETURNING *`,
+        [
+          userId,
+          username || null,
+          typeof contacted === "boolean" ? contacted : null,
+          typeof whitelisted === "boolean" ? whitelisted : null,
+          wallet ? String(wallet).trim() : null,
+          note != null ? String(note).slice(0, 500) : null,
+          wallet !== undefined,
+          note !== undefined,
+        ],
+      );
+      res.json({ flags: result.rows[0] });
     } catch (err) {
       next(err);
     }

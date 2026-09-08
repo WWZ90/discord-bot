@@ -99,6 +99,20 @@ async function createSchema() {
       ADD COLUMN IF NOT EXISTS evidence_message_ids TEXT;
   `);
 
+  // Admin-only whitelist workflow tracking per requester (dashboard only,
+  // never surfaced in Discord): contacted yet? whitelisted yet? which wallet?
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_flags (
+      discord_user_id TEXT PRIMARY KEY,
+      username TEXT,
+      contacted BOOLEAN NOT NULL DEFAULT FALSE,
+      whitelisted BOOLEAN NOT NULL DEFAULT FALSE,
+      wallet TEXT,
+      note TEXT,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+  `);
+
   // Community warnings: many per request, at most one per reporter
   await pool.query(`
     CREATE TABLE IF NOT EXISTS request_reports (
